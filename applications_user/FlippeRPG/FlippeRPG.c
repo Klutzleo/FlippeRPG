@@ -6,21 +6,36 @@
 
 #include "codex/codex.h"
 #include "signal/signal_engine.h"
+#include "techniques/techniques.h"
+#include "save/save_system.h"
 
 int32_t flippe_rpg_app(void* p) {
     (void)p;
     srand((unsigned)time(NULL));
 
+    // Load or initialize Codex
     Codex player_codex;
-    init_codex(&player_codex, "Jason");
+    if(!load_codex_state(&player_codex)) {
+        init_codex(&player_codex, "Jason");
+    }
 
-    // Flipper screen output
+    // Show Codex summary
     FuriString* output = furi_string_alloc();
     furi_string_printf(output, "Codex: %s\nXP: %d", player_codex.codex_id, player_codex.xp_total);
     popup_message(output);
+    furi_string_free(output);
 
+    // Run signal loop (stubbed)
     start_signal_loop(&player_codex);
 
-    furi_string_free(output);
+    // Test Pulse Open (stubbed trigger)
+    bool user_pressed_pulse_open_button = true; // Replace with input check later
+    if(user_pressed_pulse_open_button) {
+        pulse_open(&player_codex);
+    }
+
+    // Save progress
+    save_codex_state(&player_codex);
+
     return 0;
 }
