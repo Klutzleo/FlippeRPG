@@ -21,9 +21,17 @@ class Main(App):
         self.parser_binsize.set_defaults(func=self.process_bin)
 
     def process_elf(self):
-        all_sizes = subprocess.check_output(
-            ["arm-none-eabi-size", "-A", self.args.elfname], shell=False
-        )
+        try:
+            all_sizes = subprocess.check_output(
+                ["arm-none-eabi-size", "-A", self.args.elfname], shell=False
+            )
+        except subprocess.CalledProcessError as e:
+            print(f"warning: arm-none-eabi-size failed ({e}); skipping size summary")
+            return 0
+        except FileNotFoundError:
+            print("warning: arm-none-eabi-size not found in PATH; skipping size summary")
+            return 0
+
         all_sizes = all_sizes.splitlines()
 
         sections_to_keep = (".text", ".rodata", ".data", ".bss", ".free_flash")
