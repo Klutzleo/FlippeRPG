@@ -3,6 +3,10 @@
 #include <stdlib.h>
 #include <time.h>
 #include <stdio.h>
+#include "../shrine/shrine.h"
+#include "../xp/xp_engine.h"
+#include "../codex/codex.h"
+
 
 char* hash_signal(const char* raw_data) {
     // Simple hash stub (replace with real hash later)
@@ -35,4 +39,12 @@ void start_signal_loop(Codex* codex) {
     log_signal(codex, hash, xp);
 
     printf("Scanned signal: %s → XP: %d\n", hash, xp);
+
+    // Shrine logic: trigger Cave That Listens
+    trigger_shrine(codex, SHRINE_CAVE_THAT_LISTENS, SIGNAL_SUBGHZ);
+
+    // Feedback if unlocked
+    if (is_ritual_complete(codex, SHRINE_CAVE_THAT_LISTENS)) {
+        popup_message_str("Shrine awakened. Pulse Open unlocked.");
+    }
 }
