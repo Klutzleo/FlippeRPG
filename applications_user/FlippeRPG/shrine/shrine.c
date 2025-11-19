@@ -52,19 +52,18 @@ void complete_ritual(Codex* codex, ShrineID shrine_id) {
     // Unlock technique based on shrine ID
     switch (shrine_id) {
         case SHRINE_CAVE_THAT_LISTENS:
-            strncpy(codex->callings_unlocked[0], "Pulse Open", 16);
+            codex_unlock_technique(codex, "Pulse Open");
             break;
         case SHRINE_FLAME_REACH:
-            strncpy(codex->callings_unlocked[1], "Flame Reach", 16);
+            codex_unlock_technique(codex, "Flame Reach");
             break;
         case SHRINE_BIND_WHISPER:
-            strncpy(codex->callings_unlocked[2], "Bind Whisper", 16);
+            codex_unlock_technique(codex, "Bind Whisper");
             break;
         case SHRINE_THREAD_TOUCH:
-            strncpy(codex->callings_unlocked[3], "Thread Touch", 16);
+            codex_unlock_technique(codex, "Thread Touch");
             break;
     }
-
     printf("[Shrine] Ritual complete! Technique unlocked.\n");
 }
 

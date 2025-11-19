@@ -8,5 +8,6 @@ APP_SOURCE = FlippeRPG.c \
     duel/duel.c \
     save/save_system.c \
     core/utils.c
+    tests/test_shrine.c \
 
 include $(FLIPPER_PATH)/applications/api.mk

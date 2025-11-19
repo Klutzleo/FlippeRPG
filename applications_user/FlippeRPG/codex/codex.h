@@ -52,7 +52,6 @@ typedef struct {
     int xp_total;                               // Total XP from signals
     int duel_xp;                                // XP from duels
 
-    char callings_unlocked[5][16];              // Legacy field (can be deprecated)
     EchoEntry echo_log[MAX_ECHO_LOG];           // Memory Echoes collected
     SignalEntry signal_history[MAX_SIGNALS];    // Rolling signal log
     EncounterEntry encounter_log[MAX_ENCOUNTERS]; // Multiplayer encounters
