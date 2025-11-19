@@ -3,13 +3,15 @@
 #include <stdio.h>
 #include <string.h>
 
+// Triggers a shrine ritual based on signal type and shrine ID
 void trigger_shrine(Codex* codex, ShrineID shrine_id, SignalType signal_type) {
+    // Check if the ritual has already been completed
     if (is_ritual_complete(codex, shrine_id)) {
         printf("[Shrine] Ritual already complete for shrine %d\n", shrine_id);
         return;
     }
 
-    // Check signal type requirement
+    // Validate signal type against shrine requirement
     bool valid = false;
     switch (shrine_id) {
         case SHRINE_CAVE_THAT_LISTENS:
@@ -26,25 +28,28 @@ void trigger_shrine(Codex* codex, ShrineID shrine_id, SignalType signal_type) {
             break;
     }
 
+    // If signal type doesn't match, ritual fails
     if (!valid) {
         printf("[Shrine] The signal does not resonate with this shrine.\n");
         return;
     }
 
-    // Ritual succeeds
+    // Ritual succeeds — mark shrine as complete and unlock technique
     printf("[Shrine] You feel a resonance...\n");
     complete_ritual(codex, shrine_id);
 }
 
+// Checks if a shrine ritual has already been completed
 bool is_ritual_complete(Codex* codex, ShrineID shrine_id) {
     return codex->shrine_progress[shrine_id].ritual_complete;
 }
 
+// Marks a shrine ritual as complete and unlocks the associated technique
 void complete_ritual(Codex* codex, ShrineID shrine_id) {
     codex->shrine_progress[shrine_id].ritual_complete = true;
     codex->shrine_progress[shrine_id].resonance_triggered = true;
 
-    // Unlock technique based on shrine
+    // Unlock technique based on shrine ID
     switch (shrine_id) {
         case SHRINE_CAVE_THAT_LISTENS:
             strncpy(codex->callings_unlocked[0], "Pulse Open", 16);
@@ -61,4 +66,21 @@ void complete_ritual(Codex* codex, ShrineID shrine_id) {
     }
 
     printf("[Shrine] Ritual complete! Technique unlocked.\n");
+}
+
+// Special NFC-triggered shrine logic for Bind Whisper
+void trigger_bind_whisper_shrine(Codex* codex, const char* scanned_tag_id) {
+    // If already unlocked, show feedback
+    if (codex_has_technique(codex, "Bind Whisper")) {
+        popup_message("The memory is already bound.");
+        return;
+    }
+
+    // Validate scanned tag ID (can be expanded with metadata later)
+    if (strcmp(scanned_tag_id, "BIND-TAG-001") == 0) {
+        codex_unlock_technique(codex, "Bind Whisper");
+        popup_message("You have unlocked Bind Whisper!");
+    } else {
+        popup_message("The tag resists your memory.");
+    }
 }
