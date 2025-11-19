@@ -2,6 +2,7 @@
 #include "../core/constants.h"
 #include <stdio.h>
 #include <string.h>
+#include "../core/utils.h"
 
 // Triggers a shrine ritual based on signal type and shrine ID
 void trigger_shrine(Codex* codex, ShrineID shrine_id, SignalType signal_type) {
