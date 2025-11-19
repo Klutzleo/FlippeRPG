@@ -1,3 +1,6 @@
+#ifndef FLIPPERPG_CONSTANTS_H
+#define FLIPPERPG_CONSTANTS_H
+
 typedef enum {
     SIGNAL_SUBGHZ,
     SIGNAL_IR,
@@ -12,3 +15,5 @@ typedef enum {
     SHRINE_THREAD_TOUCH,
     NUM_SHRINES
 } ShrineID;
+
+#endif

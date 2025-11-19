@@ -2,13 +2,7 @@
 #define FLIPPERPG_SHRINE_H
 
 #include "../codex/codex.h"
-
-typedef enum {
-    SHRINE_CAVE_THAT_LISTENS,
-    SHRINE_FLAME_REACH,
-    SHRINE_BIND_WHISPER,
-    SHRINE_THREAD_TOUCH
-} ShrineID;
+#include "../core/constants.h"  // ✅ This brings in ShrineID and SignalType
 
 void trigger_shrine(Codex* codex, ShrineID shrine_id, SignalType signal_type);
 bool is_ritual_complete(Codex* codex, ShrineID shrine_id);
