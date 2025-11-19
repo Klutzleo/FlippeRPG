@@ -1,6 +1,14 @@
 typedef enum {
     SIGNAL_SUBGHZ,
-    SIGNAL_NFC,
     SIGNAL_IR,
+    SIGNAL_NFC,
     SIGNAL_GPIO
 } SignalType;
+
+typedef enum {
+    SHRINE_CAVE_THAT_LISTENS,
+    SHRINE_FLAME_REACH,
+    SHRINE_BIND_WHISPER,
+    SHRINE_THREAD_TOUCH,
+    NUM_SHRINES
+} ShrineID;

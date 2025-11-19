@@ -33,7 +33,8 @@ typedef struct {
 // Tracks shrine progress (can be expanded in Phase 2)
 typedef struct {
     char shrine_id[16];     // Unique shrine name
-    bool completed;         // Whether the ritual was completed
+    bool ritual_complete;         // Whether the ritual was completed
+    bool resonance_triggered;
     time_t last_visited;    // For cooldowns or resets
 } ShrineProgress;
 

@@ -1,0 +1,1 @@
+void popup_message(const char* message);
