@@ -1,5 +1,5 @@
 # Ensure consistent line endings across platforms
-* text=auto
+* text=auto eol=lf
 
 # Treat C and header files as text
 *.c text
