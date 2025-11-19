@@ -2,6 +2,7 @@
 #include "../shrine/shrine.h"
 #include <assert.h>
 #include <stdio.h>
+#include "../core/constants.h"
 
 int main() {
     Codex test_codex = {0};  // Zero-initialize Codex

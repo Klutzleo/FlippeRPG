@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
+#include <stdlib.h>
 
 // Initializes a new Codex for the player
 void init_codex(Codex* codex, const char* player_name) {
@@ -14,7 +15,6 @@ void init_codex(Codex* codex, const char* player_name) {
     codex->duel_xp = 0;
 
     // Clear all Codex subsystems
-    memset(codex->callings_unlocked, 0, sizeof(codex->callings_unlocked));
     memset(codex->echo_log, 0, sizeof(codex->echo_log));
     memset(codex->signal_history, 0, sizeof(codex->signal_history));
     memset(codex->encounter_log, 0, sizeof(codex->encounter_log));

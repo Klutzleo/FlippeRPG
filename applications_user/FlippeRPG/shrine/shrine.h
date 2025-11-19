@@ -10,7 +10,7 @@ typedef enum {
     SHRINE_THREAD_TOUCH
 } ShrineID;
 
-void trigger_shrine(Codex* codex, ShrineID shrine_id);
+void trigger_shrine(Codex* codex, ShrineID shrine_id, SignalType signal_type);
 bool is_ritual_complete(Codex* codex, ShrineID shrine_id);
 void complete_ritual(Codex* codex, ShrineID shrine_id);
 
