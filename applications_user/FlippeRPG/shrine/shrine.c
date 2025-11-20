@@ -50,19 +50,29 @@ void trigger_bind_whisper_shrine(Codex* codex, const char* scanned_tag_id) {
     }
 }
 
+#include <time.h> // Add this at the top if not already included
+
 void trigger_shrine(Codex* codex, ShrineID shrine_id, SignalType signal_type) {
     const ShrineDefinition* shrine = &shrine_definitions[shrine_id];
+    ShrineProgress* progress = &codex->shrine_progress[shrine_id];
 
-    if (is_ritual_complete(codex, shrine_id)) {
-        popup_message("The ritual is already complete.");
+    time_t now = time(NULL);
+    double elapsed = difftime(now, progress->last_visited);
+
+    // Cooldown check
+    if (progress->ritual_complete && shrine->cooldown_seconds > 0 && elapsed < shrine->cooldown_seconds) {
+        popup_message("The shrine is dormant. Try again later.");
         return;
     }
 
+    // Signal mismatch
     if (signal_type != shrine->required_signal) {
         popup_message("The signal does not resonate.");
         return;
     }
 
+    // Ritual succeeds
     popup_message(shrine->flavor_text);
     complete_ritual(codex, shrine_id);
+    progress->last_visited = now;
 }

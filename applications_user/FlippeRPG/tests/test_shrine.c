@@ -22,15 +22,23 @@ int main() {
     ShrineID shrine_id = SHRINE_FLAME_REACH;
     SignalType signal = SIGNAL_IR;
 
-    // Trigger shrine ritual
-    trigger_shrine(&test_codex, shrine_id, signal);
+    shrine_definitions[shrine_id].cooldown_seconds = 5;
 
-    // Print shrine status
+    // First trigger — should succeed
+    trigger_shrine(&test_codex, shrine_id, signal);
     print_shrine_status(&test_codex, shrine_id);
 
-    // Assert technique was unlocked
+    // Second trigger — should fail due to cooldown
+    trigger_shrine(&test_codex, shrine_id, signal);
+
+    // Fast-forward time by 10 seconds
+    test_codex.shrine_progress[shrine_id].last_visited -= 10;
+
+    // Third trigger — should succeed again
+    trigger_shrine(&test_codex, shrine_id, signal);
+
     assert(codex_has_technique(&test_codex, "Flame Reach"));
-    printf("✅ Shrine test passed: Flame Reach unlocked.\n");
+    printf("✅ Shrine test passed: Flame Reach unlocked and cooldown logic verified.\n");
 
     return 0;
 }
