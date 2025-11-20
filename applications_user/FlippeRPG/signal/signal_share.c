@@ -12,4 +12,7 @@ void share_signal(Codex* codex, SignalType type, const char* signal_hash) {
 void receive_signal(Codex* codex, SignalType type, const char* signal_hash) {
     printf("[Signal] Received signal (%s) via %d\n", signal_hash, type);
     log_signal(codex, signal_hash, type);
+
+    // Ambient aura feedback
+    printf("[Aura] You sense a presence... Their aura is %s.\n", codex->aura_trait);
 }

@@ -15,6 +15,8 @@ void complete_ritual(Codex* codex, ShrineID shrine_id) {
     codex->shrine_progress[shrine_id].ritual_complete = true;
     codex->shrine_progress[shrine_id].resonance_triggered = true;
 
+    assign_aura(codex, shrine_id); // 🌈 Set aura based on shrine
+
     // Unlock technique based on shrine ID
     switch (shrine_id) {
         case SHRINE_CAVE_THAT_LISTENS:

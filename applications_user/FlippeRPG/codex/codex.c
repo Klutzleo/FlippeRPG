@@ -102,3 +102,20 @@ void codex_use_technique(Codex* codex, const char* name) {
     }
     printf("[Codex] Technique not found or not unlocked: %s\n", name);
 }
+
+void assign_aura(Codex* codex, ShrineID shrine_id) {
+    switch (shrine_id) {
+        case SHRINE_FLAME_REACH:
+            strncpy(codex->aura_trait, "Flamebound", sizeof(codex->aura_trait));
+            break;
+        case SHRINE_BIND_WHISPER:
+            strncpy(codex->aura_trait, "Whispered", sizeof(codex->aura_trait));
+            break;
+        case SHRINE_CAVE_THAT_LISTENS:
+            strncpy(codex->aura_trait, "Echo-Touched", sizeof(codex->aura_trait));
+            break;
+        default:
+            strncpy(codex->aura_trait, "Wandering", sizeof(codex->aura_trait));
+            break;
+    }
+}
