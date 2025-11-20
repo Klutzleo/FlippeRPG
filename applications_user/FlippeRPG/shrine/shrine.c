@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "../core/utils.h"
+#include "shrine_definitions.h"
 
 // Triggers a shrine ritual based on signal type and shrine ID
 void trigger_shrine(Codex* codex, ShrineID shrine_id, SignalType signal_type) {
@@ -83,4 +84,21 @@ void trigger_bind_whisper_shrine(Codex* codex, const char* scanned_tag_id) {
     } else {
         popup_message("The tag resists your memory.");
     }
+}
+
+void trigger_shrine(Codex* codex, ShrineID shrine_id, SignalType signal_type) {
+    const ShrineDefinition* shrine = &shrine_definitions[shrine_id];
+
+    if (is_ritual_complete(codex, shrine_id)) {
+        popup_message("The ritual is already complete.");
+        return;
+    }
+
+    if (signal_type != shrine->required_signal) {
+        popup_message("The signal does not resonate.");
+        return;
+    }
+
+    popup_message(shrine->flavor_text);
+    complete_ritual(codex, shrine_id);
 }
