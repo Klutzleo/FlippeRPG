@@ -50,6 +50,8 @@ typedef struct {
 typedef struct {
     char player_name[16];                       // Player-entered name
     char codex_id[16];                          // Unique Codex ID (e.g. CDX1234)
+    char aura_trait[16]; // e.g. "Flamebound", "Whispered", "Echo-Touched"
+    
     int xp_total;                               // Total XP from signals
     int duel_xp;                                // XP from duels
 
