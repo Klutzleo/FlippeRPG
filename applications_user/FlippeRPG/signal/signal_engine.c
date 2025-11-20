@@ -69,3 +69,16 @@ SignalType get_signal_type(Codex* codex, const char* signal_hash) {
     }
     return SIGNAL_UNKNOWN;
 }
+
+int enter_manual_signal(Codex* codex, const char* signal_hash) {
+    // Check if signal already exists
+    int xp = calculate_signal_xp(codex, signal_hash);
+
+    // Manual entries yield reduced XP
+    if (xp == 5) xp = 2;
+    else if (xp == 1) xp = 0;
+
+    log_signal(codex, signal_hash, xp);
+    printf("[Manual] Entered signal: %s → XP: %d\n", signal_hash, xp);
+    return xp;
+}
