@@ -3,11 +3,13 @@
 #include <string.h>
 
 bool can_fuse_echoes(Codex* codex, const char* echo_a, const char* echo_b) {
-    // Basic check: both echoes must exist and be different
     if (strcmp(echo_a, echo_b) == 0) return false;
 
-    // TODO: Add deeper logic later (e.g. synergy, shrine affinity)
-    return true;
+    // Example synergy: echoes from different signal types fuse better
+    SignalType type_a = get_signal_type(codex, echo_a);
+    SignalType type_b = get_signal_type(codex, echo_b);
+
+    return type_a != type_b;
 }
 
 void fuse_echoes(Codex* codex, const char* echo_a, const char* echo_b) {

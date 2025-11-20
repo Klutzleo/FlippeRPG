@@ -60,3 +60,12 @@ void on_nfc_scan(const char* tag_id) {
         trigger_bind_whisper_shrine(&player_codex, tag_id);
     }
 }
+
+SignalType get_signal_type(Codex* codex, const char* signal_hash) {
+    for (int i = 0; i < codex->signal_log_count; i++) {
+        if (strcmp(codex->signal_log[i].hash, signal_hash) == 0) {
+            return codex->signal_log[i].type;
+        }
+    }
+    return SIGNAL_UNKNOWN;
+}
