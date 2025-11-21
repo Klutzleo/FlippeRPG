@@ -12,8 +12,12 @@ bool is_ritual_complete(Codex* codex, ShrineID shrine_id) {
 
 // Marks a shrine ritual as complete and unlocks the associated technique
 void complete_ritual(Codex* codex, ShrineID shrine_id) {
-    codex->shrine_progress[shrine_id].ritual_complete = true;
-    codex->shrine_progress[shrine_id].resonance_triggered = true;
+    ShrineProgress* progress = &codex->shrine_progress[shrine_id];
+
+    progress->ritual_complete = true;
+    progress->resonance_triggered = true;
+    progress->last_completed_time = time(NULL);
+    progress->legacy_reset_ready = false;
 
     assign_aura(codex, shrine_id); // 🌈 Set aura based on shrine
 
@@ -32,6 +36,7 @@ void complete_ritual(Codex* codex, ShrineID shrine_id) {
             codex_unlock_technique(codex, "Thread Touch");
             break;
     }
+
     printf("[Shrine] Ritual complete! Technique unlocked.\n");
 }
 
@@ -77,4 +82,10 @@ void trigger_shrine(Codex* codex, ShrineID shrine_id, SignalType signal_type) {
     popup_message(shrine->flavor_text);
     complete_ritual(codex, shrine_id);
     progress->last_visited = now;
+}
+
+bool shrine_ready_for_legacy_reset(ShrineProgress* progress) {
+    if (!progress->ritual_complete) return false;
+    double elapsed = difftime(time(NULL), progress->last_completed_time);
+    return elapsed > 604800; // 7 days
 }
