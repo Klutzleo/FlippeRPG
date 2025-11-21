@@ -3,9 +3,13 @@
 #include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
+#include "../narrative/echo_flavor.h"
 
 // Initializes a new Codex for the player
 void init_codex(Codex* codex, const char* player_name) {
+    // Seed RNG once at init for random flavor text
+    srand(time(NULL));
+
     // Set player name and generate a unique Codex ID
     strncpy(codex->player_name, player_name, sizeof(codex->player_name));
     snprintf(codex->codex_id, sizeof(codex->codex_id), "CDX%04X", rand() % 65536);
@@ -19,7 +23,7 @@ void init_codex(Codex* codex, const char* player_name) {
     memset(codex->signal_history, 0, sizeof(codex->signal_history));
     memset(codex->encounter_log, 0, sizeof(codex->encounter_log));
     memset(codex->shrine_progress, 0, sizeof(codex->shrine_progress));
-    memset(codex->techniques, 0, sizeof(codex->techniques)); // New: clear technique progress
+    memset(codex->techniques, 0, sizeof(codex->techniques));
 
     // Timestamp the save
     codex->save_timestamp = time(NULL);
@@ -63,7 +67,6 @@ void log_encounter(Codex* codex, const char* signalborn_id, const char* aura, bo
 // Unlocks a new technique and adds it to the Codex
 void codex_unlock_technique(Codex* codex, const char* name) {
     for (int i = 0; i < MAX_TECHNIQUES; i++) {
-        // Find an empty slot
         if (strlen(codex->techniques[i].name) == 0) {
             strncpy(codex->techniques[i].name, name, sizeof(codex->techniques[i].name));
             codex->techniques[i].unlocked = true;
@@ -91,8 +94,6 @@ void codex_use_technique(Codex* codex, const char* name) {
     for (int i = 0; i < MAX_TECHNIQUES; i++) {
         if (strcmp(codex->techniques[i].name, name) == 0 && codex->techniques[i].unlocked) {
             codex->techniques[i].uses++;
-
-            // Mastery threshold
             if (codex->techniques[i].uses >= 10 && !codex->techniques[i].mastered) {
                 codex->techniques[i].mastered = true;
                 printf("[Codex] Technique mastered: %s\n", name);
@@ -125,6 +126,8 @@ void mark_echo_corrupted(Codex* codex, const char* echo_id) {
         if (strcmp(codex->echo_log[i].echo_id, echo_id) == 0) {
             codex->echo_log[i].corrupted = true;
             printf("[Echo] %s marked as corrupted.\n", echo_id);
+            // Narrative feedback
+            echo_event(ECHO_CORRUPTION);
             return;
         }
     }
@@ -144,4 +147,32 @@ bool ready_for_convergence(Codex* codex) {
     }
 
     return true;
+}
+
+void echo_event(EchoState state) {
+    switch (state) {
+        case ECHO_FUSION:
+            popup_message(ECHO_FUSION_TEXT[rand() % 3]);
+            break;
+        case ECHO_CORRUPTION:
+            popup_message(ECHO_CORRUPTION_TEXT[rand() % 3]);
+            break;
+        case ECHO_LINEAGE:
+            popup_message(ECHO_LINEAGE_TEXT[rand() % 3]);
+            break;
+    }
+}
+
+// New: process echo events cleanly
+void process_echo(Codex* codex, bool fusion_success, bool corruption_detected) {
+    if (fusion_success) {
+        echo_event(ECHO_FUSION);
+        // apply fusion logic...
+    } else if (corruption_detected) {
+        echo_event(ECHO_CORRUPTION);
+        // apply corruption logic...
+    } else if (ready_for_convergence(codex)) {
+        echo_event(ECHO_LINEAGE);
+        // apply convergence logic...
+    }
 }
