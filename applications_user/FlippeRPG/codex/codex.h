@@ -61,8 +61,9 @@ typedef struct {
     EncounterEntry encounter_log[MAX_ENCOUNTERS]; // Multiplayer encounters
     ShrineProgress shrine_progress[MAX_SHRINES];  // Shrine state
     TechniqueProgress techniques[MAX_TECHNIQUES]; // Techniques and mastery
-
-    time_t save_timestamp;                      // Last save time
+    bool storm_active;
+    time_t storm_start_time;
+    time_t save_timestamp;                       // Last save time
 } Codex;
 
 // Initializes a new Codex with default values
