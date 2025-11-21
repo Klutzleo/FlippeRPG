@@ -43,11 +43,24 @@ void log_signal(Codex* codex, const char* signal_hash, int xp) {
 
     // Add XP to total
     codex->xp_total += xp;
+
+    // 🔮 Echo mechanics hook
+    bool fusion_success = (xp >= 5);        // placeholder condition for fusion
+    bool corruption_detected = (xp == 0);   // placeholder condition for corruption
+
+    process_echo(codex, fusion_success, corruption_detected);
 }
 
 // Adds XP from duels (separate from signal XP)
+// Adds XP from duels (separate from signal XP)
 void update_duel_xp(Codex* codex, int xp) {
+    // Add duel XP
     codex->duel_xp += xp;
+
+    // 🔮 After duel XP update, check for lineage convergence
+    if (ready_for_convergence(codex)) {
+        process_echo(codex, false, false); // lineage trigger
+    }
 }
 
 // Logs a multiplayer encounter with another Flipper
@@ -62,6 +75,12 @@ void log_encounter(Codex* codex, const char* signalborn_id, const char* aura, bo
     strncpy(codex->encounter_log[0].aura, aura, sizeof(codex->encounter_log[0].aura));
     codex->encounter_log[0].timestamp = time(NULL);
     codex->encounter_log[0].echo_transferred = echo_transferred;
+
+    // 🔮 Echo mechanics hook
+    if (echo_transferred) {
+        // Chance of corruption when echoes are exchanged
+        process_echo(codex, false, true);
+    }
 }
 
 // Unlocks a new technique and adds it to the Codex
