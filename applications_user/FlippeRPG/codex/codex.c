@@ -119,3 +119,13 @@ void assign_aura(Codex* codex, ShrineID shrine_id) {
             break;
     }
 }
+
+void mark_echo_corrupted(Codex* codex, const char* echo_id) {
+    for (int i = 0; i < MAX_ECHO_LOG; i++) {
+        if (strcmp(codex->echo_log[i].echo_id, echo_id) == 0) {
+            codex->echo_log[i].corrupted = true;
+            printf("[Echo] %s marked as corrupted.\n", echo_id);
+            return;
+        }
+    }
+}

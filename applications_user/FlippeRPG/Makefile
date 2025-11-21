@@ -9,5 +9,6 @@ APP_SOURCE = FlippeRPG.c \
     save/save_system.c \
     core/utils.c
     tests/test_shrine.c \
+    echo/echo_fusion.c \
 
 include $(FLIPPER_PATH)/applications/api.mk

@@ -28,6 +28,7 @@ typedef struct {
     char echo_id[16];       // Unique Echo identifier
     char description[64];   // Narrative or flavor text
     bool fused;             // Whether it has been fused
+    bool corrupted;         // Whether it is unstable or damaged
 } EchoEntry;
 
 // Tracks shrine progress (can be expanded in Phase 2)

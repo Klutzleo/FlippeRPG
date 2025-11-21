@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include "echo_fusion.h"
 
 int main() {
     Codex test_codex = {0};
