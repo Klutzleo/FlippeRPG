@@ -63,6 +63,7 @@ typedef struct {
     TechniqueProgress techniques[MAX_TECHNIQUES]; // Techniques and mastery
     bool storm_active;
     time_t storm_start_time;
+    bool converged;  // Whether the Codex has undergone convergence
     time_t save_timestamp;                       // Last save time
 } Codex;
 

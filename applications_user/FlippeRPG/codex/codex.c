@@ -129,3 +129,19 @@ void mark_echo_corrupted(Codex* codex, const char* echo_id) {
         }
     }
 }
+
+bool ready_for_convergence(Codex* codex) {
+    if (codex->duel_xp < 100) return false;
+
+    for (int i = 0; i < MAX_SHRINES; i++) {
+        if (!codex->shrine_progress[i].completed) return false;
+    }
+
+    for (int i = 0; i < MAX_ECHO_LOG; i++) {
+        if (strlen(codex->echo_log[i].echo_id) > 0 && !codex->echo_log[i].fused) {
+            return false;
+        }
+    }
+
+    return true;
+}
