@@ -8,6 +8,26 @@
 #define MAX_SHRINES 10
 #define MAX_TECHNIQUES 10
 
+// -------------------- ENUMS --------------------
+
+// Shrine IDs (expandable as you add more shrines)
+typedef enum {
+    SHRINE_FLAME_REACH,
+    SHRINE_BIND_WHISPER,
+    SHRINE_CAVE_THAT_LISTENS,
+    SHRINE_ECHO_TOUCHED,
+    MAX_SHRINE_IDS
+} ShrineID;
+
+// Echo event types (fusion, corruption, lineage convergence)
+typedef enum {
+    ECHO_FUSION,
+    ECHO_CORRUPTION,
+    ECHO_LINEAGE
+} EchoEventType;
+
+// -------------------- STRUCTS --------------------
+
 // Stores a scanned signal's hash and XP info
 typedef struct {
     char hash[32];         // Unique signal hash
@@ -31,13 +51,13 @@ typedef struct {
     bool corrupted;         // Whether it is unstable or damaged
 } EchoEntry;
 
-// Tracks shrine progress (can be expanded in Phase 2)
+// Tracks shrine progress
 typedef struct {
     char shrine_id[16];     // Unique shrine name
-    bool ritual_complete;         // Whether the ritual was completed
+    bool completed;         // Whether the shrine ritual was completed
+    bool resettable;        // Whether corruption unlocked replay
     bool resonance_triggered;
     time_t last_completed_time;
-    bool legacy_reset_ready;
     time_t last_visited;    // For cooldowns or resets
 } ShrineProgress;
 
@@ -53,8 +73,8 @@ typedef struct {
 typedef struct {
     char player_name[16];                       // Player-entered name
     char codex_id[16];                          // Unique Codex ID (e.g. CDX1234)
-    char aura_trait[16]; // e.g. "Flamebound", "Whispered", "Echo-Touched"
-    
+    char aura_trait[16];                        // e.g. "Flamebound", "Whispered", "Echo-Touched"
+
     int xp_total;                               // Total XP from signals
     int duel_xp;                                // XP from duels
 
@@ -63,14 +83,16 @@ typedef struct {
     EncounterEntry encounter_log[MAX_ENCOUNTERS]; // Multiplayer encounters
     ShrineProgress shrine_progress[MAX_SHRINES];  // Shrine state
     TechniqueProgress techniques[MAX_TECHNIQUES]; // Techniques and mastery
+
     bool storm_active;
     time_t storm_start_time;
-    bool converged;  // Whether the Codex has undergone convergence
-    time_t save_timestamp; 
-    bool legacy_mode;              // Whether the Codex has entered legacy state
-    char legacy_title[16];         // Optional: “Signalborn”, “Stormtouched”, etc.
-    
+    bool converged;                             // Whether the Codex has undergone convergence
+    time_t save_timestamp;
+    bool legacy_mode;                           // Whether the Codex has entered legacy state
+    char legacy_title[16];                      // Optional: “Signalborn”, “Stormtouched”, etc.
 } Codex;
+
+// -------------------- FUNCTION DECLARATIONS --------------------
 
 // Initializes a new Codex with default values
 void init_codex(Codex* codex, const char* player_name);
@@ -92,3 +114,14 @@ bool codex_has_technique(Codex* codex, const char* name);
 
 // Tracks usage of a technique and checks for mastery
 void codex_use_technique(Codex* codex, const char* name);
+
+// Shrine mechanics
+void attempt_shrine(Codex* codex, ShrineID shrine_id, bool ritual_success);
+void reset_shrine(Codex* codex, ShrineID shrine_id);
+void complete_shrine(Codex* codex, ShrineID shrine_id);
+
+// Echo mechanics
+void process_echo(Codex* codex, bool fusion_success, bool corruption_detected);
+void mark_echo_corrupted(Codex* codex, const char* echo_id);
+bool ready_for_convergence(Codex* codex);
+void assign_aura(Codex* codex, ShrineID shrine_id);
