@@ -26,6 +26,16 @@ typedef enum {
     ECHO_LINEAGE
 } EchoState;
 
+// Aura traits unlocked by shrines or lineage
+typedef enum {
+    AURA_NONE,
+    AURA_FLAMEBOUND,
+    AURA_WHISPERED,
+    AURA_ECHOFORGED,
+    AURA_STORMTOUCHED,
+    MAX_AURA_TRAITS
+} AuraTrait;
+
 // Echo event types (fusion, corruption, lineage convergence)
 typedef enum {
     ECHO_FUSION,
