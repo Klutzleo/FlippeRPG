@@ -140,6 +140,22 @@ void assign_aura(Codex* codex, ShrineID shrine_id) {
     }
 }
 
+// Marks a shrine as completed and assigns aura
+void complete_shrine(Codex* codex, ShrineID shrine_id) {
+    // Mark shrine as completed
+    codex->shrine_progress[shrine_id].completed = true;
+
+    // Assign aura trait based on shrine
+    assign_aura(codex, shrine_id);
+
+    printf("[Shrine] Shrine %d completed. Aura assigned: %s\n", shrine_id, codex->aura_trait);
+
+    // 🔮 After shrine completion, check for lineage convergence
+    if (ready_for_convergence(codex)) {
+        process_echo(codex, false, false); // lineage trigger
+    }
+}
+
 void mark_echo_corrupted(Codex* codex, const char* echo_id) {
     for (int i = 0; i < MAX_ECHO_LOG; i++) {
         if (strcmp(codex->echo_log[i].echo_id, echo_id) == 0) {
