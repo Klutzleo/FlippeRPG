@@ -163,16 +163,41 @@ void echo_event(EchoState state) {
     }
 }
 
-// New: process echo events cleanly
 void process_echo(Codex* codex, bool fusion_success, bool corruption_detected) {
     if (fusion_success) {
+        // Fusion: +10 XP bonus, mark fused
+        codex->xp_total += 10;
         echo_event(ECHO_FUSION);
-        // apply fusion logic...
+
+        // Example: mark latest echo as fused
+        for (int i = 0; i < MAX_ECHO_LOG; i++) {
+            if (strlen(codex->echo_log[i].echo_id) > 0 && !codex->echo_log[i].fused) {
+                codex->echo_log[i].fused = true;
+                printf("[Echo] %s fused.\n", codex->echo_log[i].echo_id);
+                break;
+            }
+        }
+
     } else if (corruption_detected) {
+        // Corruption: apply penalty, mark corrupted
+        codex->xp_total -= 2; // penalty per event
         echo_event(ECHO_CORRUPTION);
-        // apply corruption logic...
+
+        for (int i = 0; i < MAX_ECHO_LOG; i++) {
+            if (strlen(codex->echo_log[i].echo_id) > 0 && !codex->echo_log[i].corrupted) {
+                codex->echo_log[i].corrupted = true;
+                printf("[Echo] %s corrupted.\n", codex->echo_log[i].echo_id);
+                break;
+            }
+        }
+
     } else if (ready_for_convergence(codex)) {
+        // Lineage convergence: +50 XP reward, permanent aura/title
+        codex->xp_total += 50;
         echo_event(ECHO_LINEAGE);
-        // apply convergence logic...
+
+        // Example: assign permanent aura/title
+        strncpy(codex->aura_trait, "Signalborn", sizeof(codex->aura_trait));
+        printf("[Codex] Lineage convergence achieved. Aura: %s\n", codex->aura_trait);
     }
 }
