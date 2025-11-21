@@ -19,6 +19,13 @@ typedef enum {
     MAX_SHRINE_IDS
 } ShrineID;
 
+// Echo states used in Codex mechanics
+typedef enum {
+    ECHO_FUSION,
+    ECHO_CORRUPTION,
+    ECHO_LINEAGE
+} EchoState;
+
 // Echo event types (fusion, corruption, lineage convergence)
 typedef enum {
     ECHO_FUSION,

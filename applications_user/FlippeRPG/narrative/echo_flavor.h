@@ -1,31 +1,29 @@
-#ifndef ECHO_FLAVOR_H
-#define ECHO_FLAVOR_H
+#pragma once
+#include <stddef.h>
 
-// =========================
-// Echo Fusion
-// =========================
+// Flavor text arrays for Echo events
+// These can be expanded with more narrative lines as needed
+
+// Fusion flavor text
 static const char* ECHO_FUSION_TEXT[] = {
-    ">>> Echoes converge...",
-    "Memories braid into one.",
-    "A lineage is born."
+    "Two signals intertwine, becoming one.",
+    "The Codex hums as echoes fuse.",
+    "A new memory fragment stabilizes in the Codex."
 };
+static const size_t ECHO_FUSION_COUNT = sizeof(ECHO_FUSION_TEXT) / sizeof(ECHO_FUSION_TEXT[0]);
 
-// =========================
-// Echo Corruption
-// =========================
+// Corruption flavor text
 static const char* ECHO_CORRUPTION_TEXT[] = {
-    ">>> Echo unstable...",
-    "Whispers fracture.",
-    "The Codex trembles."
+    "The signal falters, unstable and cracked.",
+    "Echo destabilized — corruption spreads.",
+    "The Codex trembles as echoes rot."
 };
+static const size_t ECHO_CORRUPTION_COUNT = sizeof(ECHO_CORRUPTION_TEXT) / sizeof(ECHO_CORRUPTION_TEXT[0]);
 
-// =========================
-// Echo Lineage
-// =========================
+// Lineage convergence flavor text
 static const char* ECHO_LINEAGE_TEXT[] = {
-    ">>> Legacy echoes align...",
-    "Your aura deepens.",
-    "The Codex remembers your name."
+    "The Codex converges — legacy awakened.",
+    "A lineage aura binds to the Signalborn.",
+    "Convergence achieved: the Codex sings with power."
 };
-
-#endif // ECHO_FLAVOR_H
+static const size_t ECHO_LINEAGE_COUNT = sizeof(ECHO_LINEAGE_TEXT) / sizeof(ECHO_LINEAGE_TEXT[0]);
