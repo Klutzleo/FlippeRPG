@@ -1,123 +1,82 @@
-#include "shrine.h"
-#include "../core/constants.h"
+#include "codex.h"
 #include <stdio.h>
 #include <string.h>
-#include "../core/utils.h"
-#include "shrine_definitions.h"
-#include "shrine_flavor.h"
-#include <time.h> // for time tracking
+#include <stdlib.h>
+#include <time.h>
 
-// Checks if a shrine ritual has already been completed
-bool is_ritual_complete(Codex* codex, ShrineID shrine_id) {
-    return codex->shrine_progress[shrine_id].ritual_complete;
-}
+// Attempt a shrine ritual; success or failure determines outcome
+void attempt_shrine(Codex* codex, ShrineID shrine_id, bool ritual_success) {
+    ShrineProgress* shrine = &codex->shrine_progress[shrine_id];
 
-// Marks a shrine ritual as complete and unlocks the associated technique
-void complete_ritual(Codex* codex, ShrineID shrine_id) {
-    ShrineProgress* progress = &codex->shrine_progress[shrine_id];
+    if (ritual_success) {
+        shrine->completed = true;
+        shrine->last_completed_time = time(NULL);
 
-    progress->ritual_complete = true;
-    progress->resonance_triggered = true;
-    progress->last_completed_time = time(NULL);
-    progress->legacy_reset_ready = false;
+        assign_aura(codex, shrine_id);
+        printf("[Shrine] Shrine %d completed. Aura assigned: %s\n", shrine_id, codex->aura_trait);
 
-    assign_aura(codex, shrine_id); // 🌈 Set aura based on shrine
-
-    // Unlock technique + immersive narrative
-    switch (shrine_id) {
-        case SHRINE_CAVE_THAT_LISTENS:
-            codex_unlock_technique(codex, "Pulse Open");
-            popup_message(">>> The Cave yields. Pulse Open unlocked.");
-            break;
-        case SHRINE_FLAME_REACH:
-            codex_unlock_technique(codex, "Flame Reach");
-            popup_message(">>> Flame leaps. Technique unlocked: Flame Reach.");
-            break;
-        case SHRINE_BIND_WHISPER:
-            codex_unlock_technique(codex, "Bind Whisper");
-            popup_message(">>> Whisper binds. Technique unlocked: Bind Whisper.");
-            break;
-        case SHRINE_THREAD_TOUCH:
-            codex_unlock_technique(codex, "Thread Touch");
-            popup_message(">>> Threads tighten. Technique unlocked: Thread Touch.");
-            break;
-    }
-
-    // Optional debug log
-    printf("[Shrine] Ritual complete for shrine %d\n", shrine_id);
-}
-
-// Special NFC-triggered shrine logic for Bind Whisper
-void trigger_bind_whisper_shrine(Codex* codex, const char* scanned_tag_id) {
-    // If already unlocked, show feedback
-    if (codex_has_technique(codex, "Bind Whisper")) {
-        popup_message(">>> The memory is already bound.");
-        return;
-    }
-
-    // Validate scanned tag ID (can be expanded with metadata later)
-    if (strcmp(scanned_tag_id, "BIND-TAG-001") == 0) {
-        codex_unlock_technique(codex, "Bind Whisper");
-        popup_message(">>> Whisper binds. Technique unlocked: Bind Whisper.");
-    } else {
-        popup_message(">>> The tag resists your memory.");
-    }
-}
-
-void trigger_shrine(Codex* codex, ShrineID shrine_id, SignalType signal_type) {
-    const ShrineDefinition* shrine = &shrine_definitions[shrine_id];
-    ShrineProgress* progress = &codex->shrine_progress[shrine_id];
-
-    time_t now = time(NULL);
-    double elapsed = difftime(now, progress->last_visited);
-
-    // Cooldown check
-    if (progress->ritual_complete && shrine->cooldown_seconds > 0 && elapsed < shrine->cooldown_seconds) {
-        switch (shrine_id) {
-            case SHRINE_CAVE_THAT_LISTENS:
-                popup_message(SHRINE_CAVE_DORMANT[rand() % 3]);
-                break;
-            case SHRINE_FLAME_REACH:
-                popup_message(SHRINE_FLAME_DORMANT[rand() % 3]);
-                break;
-            case SHRINE_BIND_WHISPER:
-                popup_message(SHRINE_BIND_DORMANT[rand() % 3]);
-                break;
-            case SHRINE_THREAD_TOUCH:
-                popup_message(SHRINE_THREAD_DORMANT[rand() % 3]);
-                break;
+        // 🔮 After shrine completion, check for lineage convergence
+        if (ready_for_convergence(codex)) {
+            process_echo(codex, false, false); // lineage trigger
         }
-        return;
-    }
+    } else {
+        printf("[Shrine] Shrine %d ritual failed.\n", shrine_id);
 
-    // Signal mismatch
-    if (signal_type != shrine->required_signal) {
-        popup_message(">>> The signal falters. Resonance denied.");
-        return;
+        // 🔮 50% chance corruption on failure
+        if (rand() % 100 < 50) {
+            process_echo(codex, false, true); // corruption event
+            shrine->resettable = true;        // corruption unlocks replay
+            printf("[Shrine] Shrine %d corrupted — reset unlocked.\n", shrine_id);
+        } else {
+            printf("[Shrine] Failure passed without corruption.\n");
+        }
     }
-
-    // Ritual succeeds
-    switch (shrine_id) {
-        case SHRINE_CAVE_THAT_LISTENS:
-            popup_message(SHRINE_CAVE_ACTIVE[rand() % 3]);
-            break;
-        case SHRINE_FLAME_REACH:
-            popup_message(SHRINE_FLAME_ACTIVE[rand() % 3]);
-            break;
-        case SHRINE_BIND_WHISPER:
-            popup_message(SHRINE_BIND_ACTIVE[rand() % 3]);
-            break;
-        case SHRINE_THREAD_TOUCH:
-            popup_message(SHRINE_THREAD_ACTIVE[rand() % 3]);
-            break;
-    }
-
-    complete_ritual(codex, shrine_id);
-    progress->last_visited = now;
 }
 
-bool shrine_ready_for_legacy_reset(ShrineProgress* progress) {
-    if (!progress->ritual_complete) return false;
-    double elapsed = difftime(time(NULL), progress->last_completed_time);
-    return elapsed > 604800; // 7 days
+// Mark shrine as resettable (corruption unlocks replay)
+void reset_shrine(Codex* codex, ShrineID shrine_id) {
+    ShrineProgress* shrine = &codex->shrine_progress[shrine_id];
+    if (shrine->completed && shrine->resettable) {
+        shrine->completed = false;
+        shrine->resettable = false;
+        shrine->last_visited = time(NULL);
+        printf("[Shrine] Shrine %d reset — ritual can be replayed.\n", shrine_id);
+    } else {
+        printf("[Shrine] Shrine %d cannot be reset.\n", shrine_id);
+    }
+}
+
+// Complete shrine directly (used for scripted unlocks or guaranteed rituals)
+void complete_shrine(Codex* codex, ShrineID shrine_id) {
+    ShrineProgress* shrine = &codex->shrine_progress[shrine_id];
+    shrine->completed = true;
+    shrine->last_completed_time = time(NULL);
+
+    assign_aura(codex, shrine_id);
+    printf("[Shrine] Shrine %d completed. Aura assigned: %s\n", shrine_id, codex->aura_trait);
+
+    if (ready_for_convergence(codex)) {
+        process_echo(codex, false, false);
+    }
+}
+
+// Map shrine IDs to aura traits
+void assign_aura(Codex* codex, ShrineID shrine_id) {
+    switch (shrine_id) {
+        case SHRINE_FLAME_REACH:
+            strncpy(codex->aura_trait, AURA_FLAMEBOUND, sizeof(codex->aura_trait));
+            break;
+        case SHRINE_BIND_WHISPER:
+            strncpy(codex->aura_trait, AURA_WHISPERED, sizeof(codex->aura_trait));
+            break;
+        case SHRINE_ECHO_TOUCHED:
+            strncpy(codex->aura_trait, AURA_ECHOFORGED, sizeof(codex->aura_trait));
+            break;
+        case SHRINE_CAVE_THAT_LISTENS:
+            strncpy(codex->aura_trait, AURA_STORMTOUCHED, sizeof(codex->aura_trait));
+            break;
+        default:
+            strncpy(codex->aura_trait, "Unknown", sizeof(codex->aura_trait));
+            break;
+    }
 }
