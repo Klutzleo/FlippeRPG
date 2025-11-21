@@ -78,8 +78,12 @@ void log_encounter(Codex* codex, const char* signalborn_id, const char* aura, bo
 
     // 🔮 Echo mechanics hook
     if (echo_transferred) {
-        // Chance of corruption when echoes are exchanged
-        process_echo(codex, false, true);
+        // 30% chance of corruption when echoes are exchanged
+        if (rand() % 100 < 30) {
+            process_echo(codex, false, true);
+        } else {
+            printf("[Encounter] Echo transferred safely.\n");
+        }
     }
 }
 
@@ -161,8 +165,18 @@ void mark_echo_corrupted(Codex* codex, const char* echo_id) {
         if (strcmp(codex->echo_log[i].echo_id, echo_id) == 0) {
             codex->echo_log[i].corrupted = true;
             printf("[Echo] %s marked as corrupted.\n", echo_id);
+
             // Narrative feedback
             echo_event(ECHO_CORRUPTION);
+
+            // 🔮 Shrine reset unlock: corruption makes shrines replayable
+            for (int s = 0; s < MAX_SHRINES; s++) {
+                if (codex->shrine_progress[s].completed) {
+                    codex->shrine_progress[s].resettable = true;
+                    printf("[Shrine] Shrine %d reset unlocked due to corruption.\n", s);
+                }
+            }
+
             return;
         }
     }
@@ -234,5 +248,15 @@ void process_echo(Codex* codex, bool fusion_success, bool corruption_detected) {
         // Example: assign permanent aura/title
         strncpy(codex->aura_trait, "Signalborn", sizeof(codex->aura_trait));
         printf("[Codex] Lineage convergence achieved. Aura: %s\n", codex->aura_trait);
+    }
+}
+
+void reset_shrine(Codex* codex, ShrineID shrine_id) {
+    if (codex->shrine_progress[shrine_id].resettable) {
+        codex->shrine_progress[shrine_id].completed = false;
+        codex->shrine_progress[shrine_id].resettable = false;
+        printf("[Shrine] Shrine %d has been reset. Ritual may be replayed.\n", shrine_id);
+    } else {
+        printf("[Shrine] Shrine %d cannot be reset right now.\n", shrine_id);
     }
 }
