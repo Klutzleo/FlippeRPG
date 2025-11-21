@@ -1,0 +1,29 @@
+[
+  {
+    "echo_id": "ECHO001",
+    "state": "fusion",
+    "lines": [
+      ">>> Echoes converge...",
+      "Memories braid into one.",
+      "A lineage is born."
+    ]
+  },
+  {
+    "echo_id": "ECHO002",
+    "state": "corruption",
+    "lines": [
+      ">>> Echo unstable...",
+      "Whispers fracture.",
+      "The Codex trembles."
+    ]
+  },
+  {
+    "echo_id": "ECHO003",
+    "state": "lineage",
+    "lines": [
+      ">>> Legacy echoes align...",
+      "Your aura deepens.",
+      "The Codex remembers your name."
+    ]
+  }
+]s
