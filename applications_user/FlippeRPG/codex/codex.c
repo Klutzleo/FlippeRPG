@@ -144,6 +144,31 @@ void assign_aura(Codex* codex, ShrineID shrine_id) {
     }
 }
 
+// Attempts a shrine ritual; success or failure determines outcome
+void attempt_shrine(Codex* codex, ShrineID shrine_id, bool ritual_success) {
+    if (ritual_success) {
+        // Shrine completed normally
+        codex->shrine_progress[shrine_id].completed = true;
+        assign_aura(codex, shrine_id);
+        printf("[Shrine] Shrine %d completed. Aura assigned: %s\n", shrine_id, codex->aura_trait);
+
+        // 🔮 After shrine completion, check for lineage convergence
+        if (ready_for_convergence(codex)) {
+            process_echo(codex, false, false); // lineage trigger
+        }
+    } else {
+        // Ritual failed
+        printf("[Shrine] Shrine %d ritual failed.\n", shrine_id);
+
+        // 🔮 50% chance corruption on failure
+        if (rand() % 100 < 50) {
+            process_echo(codex, false, true); // corruption event
+        } else {
+            printf("[Shrine] Failure passed without corruption.\n");
+        }
+    }
+}
+
 // Marks a shrine as completed and assigns aura
 void complete_shrine(Codex* codex, ShrineID shrine_id) {
     // Mark shrine as completed
