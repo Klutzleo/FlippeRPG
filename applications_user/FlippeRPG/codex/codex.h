@@ -36,6 +36,8 @@ typedef struct {
     char shrine_id[16];     // Unique shrine name
     bool ritual_complete;         // Whether the ritual was completed
     bool resonance_triggered;
+    time_t last_completed_time;
+    bool legacy_reset_ready;
     time_t last_visited;    // For cooldowns or resets
 } ShrineProgress;
 
@@ -64,7 +66,10 @@ typedef struct {
     bool storm_active;
     time_t storm_start_time;
     bool converged;  // Whether the Codex has undergone convergence
-    time_t save_timestamp;                       // Last save time
+    time_t save_timestamp; 
+    bool legacy_mode;              // Whether the Codex has entered legacy state
+    char legacy_title[16];         // Optional: “Signalborn”, “Stormtouched”, etc.
+    
 } Codex;
 
 // Initializes a new Codex with default values
