@@ -285,3 +285,7 @@ void reset_shrine(Codex* codex, ShrineID shrine_id) {
         printf("[Shrine] Shrine %d cannot be reset right now.\n", shrine_id);
     }
 }
+
+void award_xp(Codex* codex, int amount) {
+    codex->xp_total += amount;
+}
