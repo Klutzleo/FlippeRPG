@@ -1,7 +1,7 @@
 #include "signal_fusion.h"
 #include <stdio.h>
 #include <string.h>
-#include "echo_fusion.h"
+#include "../echo/echo_fusion.h"
 
 bool can_fuse_echoes(Codex* codex, const char* echo_a, const char* echo_b) {
     if (strcmp(echo_a, echo_b) == 0) return false;
