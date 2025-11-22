@@ -1,6 +1,7 @@
 #pragma once
 #include <stdbool.h>
 #include <time.h>
+#include "../core/constants.h"
 
 #define MAX_SIGNALS 200
 #define MAX_ENCOUNTERS 10
