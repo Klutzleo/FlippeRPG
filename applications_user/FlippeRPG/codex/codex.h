@@ -130,3 +130,5 @@ void process_echo(Codex* codex, bool fusion_success, bool corruption_detected);
 void mark_echo_corrupted(Codex* codex, const char* echo_id);
 bool ready_for_convergence(Codex* codex);
 void assign_aura(Codex* codex, ShrineID shrine_id);
+
+void award_xp(Codex* codex, int amount);

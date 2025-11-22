@@ -13,6 +13,8 @@ typedef enum {
     SHRINE_FLAME_REACH,
     SHRINE_BIND_WHISPER,
     SHRINE_THREAD_TOUCH,
+    SHRINE_ECHO_TOUCHED,   
+    SHRINE_UNKNOWN,        
     NUM_SHRINES
 } ShrineID;
 
