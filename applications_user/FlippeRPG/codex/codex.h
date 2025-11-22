@@ -10,14 +10,6 @@
 
 // -------------------- ENUMS --------------------
 
-// Shrine IDs (expandable as you add more shrines)
-typedef enum {
-    SHRINE_FLAME_REACH,
-    SHRINE_BIND_WHISPER,
-    SHRINE_CAVE_THAT_LISTENS,
-    SHRINE_ECHO_TOUCHED,
-    MAX_SHRINE_IDS
-} ShrineID;
 
 // Aura traits unlocked by shrines or lineage
 typedef enum {
@@ -103,6 +95,8 @@ typedef struct {
 } Codex;
 
 // -------------------- FUNCTION DECLARATIONS --------------------
+
+void codex_init(Codex* codex);
 
 // Initializes a new Codex with default values
 void init_codex(Codex* codex, const char* player_name);
