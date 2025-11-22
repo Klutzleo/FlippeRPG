@@ -19,13 +19,6 @@ typedef enum {
     MAX_SHRINE_IDS
 } ShrineID;
 
-// Echo states used in Codex mechanics
-typedef enum {
-    ECHO_FUSION,
-    ECHO_CORRUPTION,
-    ECHO_LINEAGE
-} EchoState;
-
 // Aura traits unlocked by shrines or lineage
 typedef enum {
     AURA_NONE,
