@@ -21,13 +21,6 @@ typedef enum {
     MAX_AURA_TRAITS
 } AuraTrait;
 
-// Echo event types (fusion, corruption, lineage convergence)
-typedef enum {
-    ECHO_FUSION,
-    ECHO_CORRUPTION,
-    ECHO_LINEAGE
-} EchoEventType;
-
 // -------------------- STRUCTS --------------------
 
 // Stores a scanned signal's hash and XP info
