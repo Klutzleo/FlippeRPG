@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include "../core/constants.h"
+#include "../codex/codex.h"
 
 // Forward declare Codex so we can use pointers
 struct Codex;

@@ -4,12 +4,7 @@
 
 // Forward declarations to avoid circular includes
 struct Codex;
-typedef struct Codex Codex;
-
-typedef struct EchoEntry EchoEntry;
-
-// Attempts to fuse two Echoes by ID
-bool fuse_echoes(Codex* codex, const char* echo_a, const char* echo_b);
+struct EchoEntry;
 
 // Finds an Echo by ID
 EchoEntry* find_echo(Codex* codex, const char* echo_id);
