@@ -2,6 +2,7 @@
 #include "../signal/signal_share.h"
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 int main() {
     Codex test_codex = {0};
