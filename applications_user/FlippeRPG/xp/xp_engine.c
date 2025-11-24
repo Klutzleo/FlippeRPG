@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include "../codex/codex.h"   // brings in typedef Codex
 
-void award_xp(Codex* codex, int amount, XPSource source) {
+void award_xp(struct Codex* codex, int amount, XPSource source) {
     if (!codex) return;
 
     switch (source) {

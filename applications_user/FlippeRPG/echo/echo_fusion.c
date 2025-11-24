@@ -5,7 +5,7 @@
 #include "../xp/xp_engine.h" // for award_xp
 #include "../codex/codex.h"
 
-EchoEntry* find_echo(Codex* codex, const char* echo_id) {
+struct EchoEntry* find_echo(struct Codex* codex, const char* echo_id) {
     for (int i = 0; i < MAX_ECHO_LOG; i++) {
         if (strcmp(codex->echo_log[i].echo_id, echo_id) == 0) {
             return &codex->echo_log[i];
