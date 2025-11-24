@@ -3,12 +3,10 @@
 
 #include <stdbool.h>
 #include "../core/constants.h"
-
-// Forward declare Codex so we can use pointers
-struct Codex;
+#include "../codex/codex.h"
 
 // Awards XP to the Codex from various sources
-void award_xp(struct Codex* codex, int amount, XPSource source);
-bool check_xp_threshold(struct Codex* codex, int threshold);
+void award_xp(Codex* codex, int amount, XPSource source);
+bool check_xp_threshold(Codex* codex, int threshold);
 
 #endif

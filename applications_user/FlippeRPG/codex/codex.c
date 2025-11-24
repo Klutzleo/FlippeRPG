@@ -4,6 +4,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include "../narrative/echo_flavor.h"
+#include "../core/constants.h"
 
 // Initializes a new Codex for the player
 void init_codex(Codex* codex, const char* player_name) {

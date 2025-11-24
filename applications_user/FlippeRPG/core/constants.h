@@ -39,9 +39,17 @@ typedef enum {
 
 // Echo event types (fusion, corruption, lineage convergence)
 typedef enum {
-    ECHO_FUSION,
-    ECHO_CORRUPTION,
-    ECHO_LINEAGE
+    ECHO_FUSION = 0,
+    ECHO_CORRUPTION = 1,
+    ECHO_LINEAGE = 2
 } EchoEventType;
+
+typedef enum {
+    ECHO_NORMAL,
+    ECHO_CORRUPTION,
+    ECHO_FUSION,
+    ECHO_LEGACY
+    // add more states as needed
+} EchoState;
 
 #endif
