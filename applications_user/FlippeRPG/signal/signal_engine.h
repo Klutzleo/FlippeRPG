@@ -1,6 +1,8 @@
 #ifndef FLIPPERPG_SIGNAL_ENGINE_H
 #define FLIPPERPG_SIGNAL_ENGINE_H
 
+#pragma once
+#include "../core/constants.h"
 #include "../codex/codex.h"
 
 void start_signal_loop(Codex* codex);
