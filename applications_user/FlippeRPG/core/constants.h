@@ -6,7 +6,8 @@ typedef enum {
     SIGNAL_SUBGHZ,
     SIGNAL_IR,
     SIGNAL_NFC,
-    SIGNAL_GPIO
+    SIGNAL_GPIO,
+    SIGNAL_FUSION
 } SignalType;
 
 typedef enum {
