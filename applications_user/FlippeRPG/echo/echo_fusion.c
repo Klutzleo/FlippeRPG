@@ -1,6 +1,8 @@
 #include "echo_fusion.h"
 #include <string.h>
 #include <stdio.h>
+#include "../core/utils.h"   // for popup_message
+#include "../xp/xp_engine.h" // for award_xp
 
 EchoEntry* find_echo(Codex* codex, const char* echo_id) {
     for (int i = 0; i < MAX_ECHO_LOG; i++) {

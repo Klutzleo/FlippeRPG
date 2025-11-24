@@ -1,2 +1,4 @@
 #include <time.h>
+#include "../core/constants.h"
+
 void imprint_shrine_tag(ShrineID shrine_id, const char* tag_id, time_t timestamp, const char* aura);
