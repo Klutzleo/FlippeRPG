@@ -1,4 +1,4 @@
-#include "echo_fusion.h"
+#include "../echo/echo_fusion.h"
 #include <string.h>
 #include <stdio.h>
 #include "../core/utils.h"   // for popup_message
@@ -33,11 +33,12 @@ bool fuse_echoes(Codex* codex, const char* echo_a, const char* echo_b) {
     // Normal fusion
     a->fused = true;
     b->fused = true;
-    award_xp(codex, 10);
+    award_xp(codex, 10, XP_SOURCE_SIGNAL); // <-- pass XPSource
     popup_message("Echo fusion successful.");
     return true;
 }
 
 void echo_event(EchoEventType type) {
     (void)type; // suppress unused warning
+    // TODO: handle fusion/corruption/lineage events
 }
