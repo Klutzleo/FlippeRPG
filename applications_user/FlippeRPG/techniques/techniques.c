@@ -1,5 +1,5 @@
 #include "techniques.h"
-#include <subghz_tx.h>
+#include "subghz_tx.h"
 #include "../codex/codex.h"
 #include "../core/utils.h"
 
