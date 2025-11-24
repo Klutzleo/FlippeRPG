@@ -9,18 +9,6 @@
 #define MAX_SHRINES     10
 #define MAX_TECHNIQUES  10
 
-// -------------------- ENUMS --------------------
-
-// Aura traits unlocked by shrines or lineage
-typedef enum {
-    AURA_NONE,
-    AURA_FLAMEBOUND,
-    AURA_WHISPERED,
-    AURA_ECHOFORGED,
-    AURA_STORMTOUCHED,
-    MAX_AURA_TRAITS
-} AuraTrait;
-
 // -------------------- STRUCTS --------------------
 
 // Stores a scanned signal's hash and XP info
