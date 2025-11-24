@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <time.h>
 #include "../core/constants.h"
+#include "../xp/xp_engine.h"
 
 #define MAX_SIGNALS 200
 #define MAX_ENCOUNTERS 10
@@ -131,4 +132,4 @@ void mark_echo_corrupted(Codex* codex, const char* echo_id);
 bool ready_for_convergence(Codex* codex);
 void assign_aura(Codex* codex, ShrineID shrine_id);
 
-void award_xp(Codex* codex, int amount);
+void award_xp(Codex* codex, int amount, XPSource source);
