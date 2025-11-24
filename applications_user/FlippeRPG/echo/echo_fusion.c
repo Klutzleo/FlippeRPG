@@ -4,6 +4,7 @@
 #include "../core/utils.h"   // for popup_message
 #include "../xp/xp_engine.h" // for award_xp
 #include "../codex/codex.h"
+#include "../core/constants.h"
 
 EchoEntry* find_echo(Codex* codex, const char* echo_id) {
     for (int i = 0; i < MAX_ECHO_LOG; i++) {
@@ -29,7 +30,19 @@ void fuse_echoes(Codex* codex, const char* echo_a, const char* echo_b) {
     award_xp(codex, 10, XP_SOURCE_SIGNAL);
 }
 
-void echo_event(EchoEventType type) {
-    (void)type; // suppress unused warning
-    // TODO: handle fusion/corruption/lineage events
+void echo_event(EchoState state) {
+    switch (state) {
+        case ECHO_FUSION:
+            popup_message(ECHO_FUSION_TEXT[rand() % 3]);
+            break;
+        case ECHO_CORRUPTION:
+            popup_message(ECHO_CORRUPTION_TEXT[rand() % 3]);
+            break;
+        case ECHO_LINEAGE:
+            popup_message(ECHO_LINEAGE_TEXT[rand() % 3]);
+            break;
+        case ECHO_LEGACY:
+            popup_message("Legacy echo triggered.");
+            break;
+    }
 }

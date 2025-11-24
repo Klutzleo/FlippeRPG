@@ -14,4 +14,4 @@ EchoEntry* find_echo(Codex* codex, const char* echo_id);
 void fuse_echoes(Codex* codex, const char* echo_a, const char* echo_b);
 
 // Handles echo events (fusion, corruption, lineage)
-void echo_event(EchoEventType type);
+void echo_event(EchoState state);
