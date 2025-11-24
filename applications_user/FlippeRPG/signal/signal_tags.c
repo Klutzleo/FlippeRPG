@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
+#include "../codex/codex.h"
 
 #define MAX_TAGS 32
 
@@ -29,9 +30,11 @@ ShrineID resolve_tag_to_shrine(const char* tag_id) {
 }
 
 // Imprints a shrine and optional metadata onto a tag
-void imprint_shrine_tag(ShrineID shrine_id, const char* tag_id,
-                        const char* aura_hint, time_t cooldown_hint,
-                        const char* echo_hint) {
+void imprint_shrine_tag(ShrineID shrine_id,
+                        const char* tag_id,
+                        const char* aura_hint,
+                        time_t cooldown_hint,
+                        const char* echo_hint){
     if (shrine_tag_count >= MAX_TAGS) {
         popup_message("Tag map full. Cannot imprint more shrines.");
         return;

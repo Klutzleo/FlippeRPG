@@ -2,6 +2,7 @@
 #pragma once
 #include <time.h>
 #include "../core/constants.h"
+#include "../codex/codex.h"
 
 void imprint_shrine_tag(ShrineID shrine_id,
                         const char* tag_id,
