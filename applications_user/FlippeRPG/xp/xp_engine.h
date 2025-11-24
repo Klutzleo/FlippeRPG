@@ -1,14 +1,13 @@
 #ifndef FLIPPERPG_XP_ENGINE_H
 #define FLIPPERPG_XP_ENGINE_H
 
-#include "../codex/codex.h"
+#include <stdbool.h>
+#include "../core/constants.h"
 
-typedef enum {
-    XP_SOURCE_SIGNAL,
-    XP_SOURCE_DUEL,
-    XP_SOURCE_SHRINE
-} XPSource;
+// Forward declare Codex so we can use pointers
+typedef struct Codex Codex;
 
+// Awards XP to the Codex from various sources
 void award_xp(Codex* codex, int amount, XPSource source);
 bool check_xp_threshold(Codex* codex, int threshold);
 

@@ -2,15 +2,21 @@
 #include <stdio.h>
 
 void award_xp(Codex* codex, int amount, XPSource source) {
-    if (source == XP_SOURCE_DUEL) {
-        codex->duel_xp += amount;
-    } else {
-        codex->xp_total += amount;
+    switch (source) {
+        case XP_SOURCE_SIGNAL:
+            codex->xp_total += amount;
+            break;
+        case XP_SOURCE_DUEL:
+            codex->duel_xp += amount;
+            break;
+        case XP_SOURCE_SHRINE:
+            codex->xp_total += amount;
+            // TODO: shrine-specific tracking later
+            break;
     }
 
-    // Debug output
     const char* label = (source == XP_SOURCE_SIGNAL) ? "Signal" :
-                        (source == XP_SOURCE_DUEL)   ? "Duel" :
+                        (source == XP_SOURCE_DUEL)   ? "Duel"   :
                                                        "Shrine";
     printf("[XP] +%d XP from %s\n", amount, label);
 }

@@ -2,7 +2,6 @@
 #include <stdbool.h>
 #include <time.h>
 #include "../core/constants.h"
-#include "../xp/xp_engine.h"
 
 #define MAX_SIGNALS 200
 #define MAX_ENCOUNTERS 10
@@ -95,6 +94,8 @@ typedef struct {
     bool legacy_mode;                           // Whether the Codex has entered legacy state
     char legacy_title[16];                      // Optional: “Signalborn”, “Stormtouched”, etc.
 } Codex;
+
+typedef struct Codex Codex; // forward declare for XP functions
 
 // -------------------- FUNCTION DECLARATIONS --------------------
 
