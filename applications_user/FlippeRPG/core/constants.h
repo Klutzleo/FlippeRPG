@@ -37,19 +37,11 @@ typedef enum {
     MAX_AURA_TRAITS
 } AuraTrait;
 
-// Echo event types (fusion, corruption, lineage convergence)
 typedef enum {
     ECHO_FUSION = 0,
     ECHO_CORRUPTION = 1,
-    ECHO_LINEAGE = 2
-} EchoEventType;
-
-typedef enum {
-    ECHO_NORMAL,
-    ECHO_CORRUPTION,
-    ECHO_FUSION,
-    ECHO_LEGACY
+    ECHO_LINEAGE = 2,
+    ECHO_LEGACY   = 3
     // add more states as needed
 } EchoState;
-
 #endif
