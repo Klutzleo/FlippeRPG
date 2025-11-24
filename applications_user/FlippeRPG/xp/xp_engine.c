@@ -1,5 +1,6 @@
 #include "xp_engine.h"
 #include <stdio.h>
+#include "../codex/codex.h"
 
 void award_xp(Codex* codex, int amount, XPSource source) {
     switch (source) {
