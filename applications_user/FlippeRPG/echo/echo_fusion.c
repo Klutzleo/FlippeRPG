@@ -5,6 +5,7 @@
 #include "../xp/xp_engine.h" // for award_xp
 #include "../codex/codex.h"
 #include "../core/constants.h"
+#include <stdlib.h>
 
 EchoEntry* find_echo(Codex* codex, const char* echo_id) {
     for (int i = 0; i < MAX_ECHO_LOG; i++) {
