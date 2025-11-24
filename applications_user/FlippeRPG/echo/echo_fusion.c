@@ -39,5 +39,5 @@ bool fuse_echoes(Codex* codex, const char* echo_a, const char* echo_b) {
 }
 
 void echo_event(EchoEventType type) {
-    // TODO: handle fusion/corruption/lineage events
+    (void)type; // suppress unused warning
 }
