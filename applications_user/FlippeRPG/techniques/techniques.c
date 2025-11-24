@@ -5,7 +5,7 @@
 
 void pulse_open(Codex* codex) {
     if (!codex_has_technique(codex, "Pulse Open")) {
-        popup_message_str("You have not unlocked Pulse Open.");
+        popup_message("You have not unlocked Pulse Open.");
         return;
     }
 
