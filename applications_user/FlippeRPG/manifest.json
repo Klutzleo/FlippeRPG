@@ -1,5 +1,7 @@
 {
   "name": "FlippeRPG",
+  "appid": "flippe_rpg",
   "path": "applications_user/FlippeRPG",
-  "type": "app"
+  "type": "app",
+  "category": "User"
 }
