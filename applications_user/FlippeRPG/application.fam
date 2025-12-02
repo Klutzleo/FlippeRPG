@@ -1,8 +1,10 @@
-App(
-    appid="flippe_rpg",
-    name="FlippeRPG",
-    apptype=FlipperAppType.EXTERNAL,
-    entry_point="flippe_rpg_app",
-    stack_size=2 * 1024,
-    fap_category="User",
-)
+apps = [
+    App(
+        appid="FlippeRPG",
+        name="FlippeRPG",
+        apptype=FlipperAppType.EXTERNAL,
+        entry_point="flippe_rpg_app",
+        stack_size=2 * 1024,
+        fap_category="User",
+    )
+]
