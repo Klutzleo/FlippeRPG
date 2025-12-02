@@ -1,6 +1,6 @@
 apps = [
     App(
-        appid="FlippeRPG",
+        appid="flipperpg",
         name="FlippeRPG",
         apptype=FlipperAppType.EXTERNAL,
         entry_point="flippe_rpg_app",
