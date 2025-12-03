@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <time.h>
 #include "../codex/codex.h"
+#include "../core/utils.h"
 
 #define MAX_TAGS 32
 
