@@ -2,7 +2,7 @@ apps = [
     App(
         appid="flipperpg",
         name="FlippeRPG",
-        apptype=FlipperAppType.EXTERNAL,
+        apptype=FlipperAppType.INTERNAL,
         entry_point="flippe_rpg_app",
         stack_size=2 * 1024,
         fap_category="User",
