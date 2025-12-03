@@ -1,5 +1,3 @@
-from fbt_app import FlipperAppType, App
-
 apps = [
     App(
         appid="flipperpg",
