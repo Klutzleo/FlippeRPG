@@ -1,7 +1,9 @@
 #include "signal_fusion.h"
+#include "signal_engine.h"
 #include <stdio.h>
 #include <string.h>
 #include "../echo/echo_fusion.h"
+#include "../core/utils.h"   // for popup_message
 
 bool can_fuse_echoes(Codex* codex, const char* echo_a, const char* echo_b) {
     if (strcmp(echo_a, echo_b) == 0) return false;
@@ -20,7 +22,7 @@ void fuse_echoes(Codex* codex, const char* echo_a, const char* echo_b) {
     }
 
     // Create new fused echo ID
-    char fused_echo[32];
+    char fused_echo[128];
     snprintf(fused_echo, sizeof(fused_echo), "FUSED-%s-%s", echo_a, echo_b);
 
     // Log new echo
