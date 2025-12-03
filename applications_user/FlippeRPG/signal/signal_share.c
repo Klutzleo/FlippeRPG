@@ -5,6 +5,7 @@
 #include <string.h>
 
 void share_signal(Codex* codex, SignalType type, const char* signal_hash) {
+    (void)codex; // Unused parameter
     printf("[Signal] Sharing signal (%s) via %d...\n", signal_hash, type);
     // IR/NFC/SubGHz broadcast logic goes here
 }
