@@ -36,12 +36,13 @@ typedef struct {
 
 // Tracks shrine progress
 typedef struct {
-    char   shrine_id[16];   // Unique shrine name
-    bool   completed;       // Whether the shrine ritual was completed
-    bool   resettable;      // Whether corruption unlocked replay
-    bool   resonance_triggered;
+    int cooldown_seconds;      // Cooldown between activations
+    char shrine_id[16];        // Unique shrine name
+    bool completed;            // Whether the shrine ritual was completed
+    bool resettable;           // Whether corruption unlocked replay
+    bool resonance_triggered;
     time_t last_completed_time;
-    time_t last_visited;    // For cooldowns or resets
+    time_t last_visited;       // For cooldowns or resets
 } ShrineProgress;
 
 // Tracks technique unlocks, usage, and mastery
