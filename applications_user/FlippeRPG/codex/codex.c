@@ -237,6 +237,13 @@ void echo_event(EchoState state) {
         case ECHO_LINEAGE:
             popup_message(ECHO_LINEAGE_TEXT[rand() % 3]);
             break;
+        case ECHO_LEGACY:
+            // Placeholder until you decide legacy behavior
+            popup_message("A legacy echo stirs... its memory feels ancient.");
+            break;
+        default:
+            // Optional: catch-all for future states
+            break;
     }
 }
 
