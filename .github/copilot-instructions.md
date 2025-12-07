@@ -1,50 +1,44 @@
 <!-- Copilot instructions for FlippeRPG repository -->
 # Copilot / AI Agent Instructions (concise)
 
-Purpose: Help an AI coding agent be productive in this repository by explaining the build system, key directories, conventions, and common developer workflows with short examples.
+Purpose: Give an AI agent the minimum context to be productive in FlippeRPG (Flipper Zero app) with build steps, layout, and patterns.
 
-- **Build system**: The repo uses SCons via `SConstruct` at the repo root. Common entry points:
-  - Build firmware: run `scons` from the repository root (see `SConstruct`).
-  - Flash device: `scons flash` (alias defined in `SConstruct`).
-  - Create distributable: `scons fw_dist` or use the `dist` aliases described in `SConstruct`.
-  - Python helper wrapper: `fbt` / `fbt.cmd` exist at the repo root for convenience—prefer those for common flows if available.
+- **Project overview**: FlippeRPG is a signal-driven RPG for Flipper Zero; players act as Signal Mages absorbing real-world signals (IR, NFC, SubGHz, GPIO) for power. The Codex tracks progress, shrines unlock techniques, and Flipper-to-Flipper encounters create echoes.
 
-- **Where code lives**:
-  - Application source: `applications/` (official) and `applications_user/` (user apps). Example app: `applications_user/FlippeRPG/shrine/shrine.c`.
-  - Core framework: `furi/` and `lib/` (platform libraries & third-party code).
-  - Hardware/targets: `targets/` and `toolchain/` (cross compiler/toolchain config).
-  - Build helpers & scripts: `site_scons/` and `scripts/` (SCons extensions, flashing, linting tools).
+- **Core features**:
+  - Signal absorption maps IR/NFC/SubGHz/GPIO to elements; XP uses dedup (unique signals grant more XP).
+  - Shrines unlock techniques (e.g., Pulse Open, Flame Reach, Bind Whisper) and track progress.
+  - Duels with separate duel XP, win/loss tracking, and synergy bonuses.
+  - Echoes share memory fragments between devices via SubGHz/NFC.
+  - Save/load locally, via NFC tag (Codex Totem), or SubGHz sync.
 
-- **SCons conventions**:
-  - Each component/directory usually has a `SConscript` that registers build targets with the root `SConstruct`.
-  - Do not move build logic into random scripts—use `site_scons/` and directory `SConscript` files so the root SCons graph can see targets.
-  - Use `distenv` targets (aliases such as `flash`, `fap_dist`, `lint`, `format`) rather than inventing bespoke commands.
+- **Project layout (app)**: `applications_user/FlippeRPG/`
+  - `FlippeRPG.c` entry point; `manifest.json` / `application.fam` define metadata.
+  - `codex/` (state, XP, signal history), `signal/` (signal engine, hashing, encounters), `shrine/` (logic, definitions), `xp/`, `duel/`, `echo/`, `save/`, `core/` (constants/utils), `techniques/`, `narrative/`, `data/`, `assets/`, `tests/`.
 
-- **Patterns & code style**:
-  - C apps follow the `applications[_user]/<app>/` layout with a dedicated directory per app and an `SConscript` to build it.
-  - Python tooling uses `black` and repo lint scripts. There are SCons aliases for `lint_py` and `format_py`—call them via `scons lint_py`/`scons format_py`.
-  - Hardware debugging targets are exposed as SCons phony targets: e.g. `scons debug`, `scons openocd`, `scons blackmagic`.
-
-- **Integration & deployment**:
-  - External app packaging and deployment are handled by `fap_dist` and `fap_deploy` (see `SConstruct` and `dist` env). `fap_deploy` uses `scripts/storage.py` to push apps to a connected device.
-  - Updater and self-update flows are implemented under `dist` targets; look at `SConstruct` sections guarded by `fullenv`.
-
-- **Where to look first when changing behavior**:
-  - If changing build behavior: `SConstruct`, `site_scons/environ.scons`, `site_scons/cc.scons`.
-  - If adding an app: mirror other `applications_user/<name>/` apps and add an `SConscript` in that directory.
-  - If modifying core runtime: inspect `furi/` and `lib/` folders and their SConscript files.
-
-- **Examples (copyable)**
-  - Build firmware: `scons` (run in repo root).
-  - Flash: `scons flash`.
-  - Run Python linter: `scons lint_py`.
+- **Build system**: SCons via `SConstruct`; helper wrappers `fbt`/`fbt.cmd`.
+  - Build firmware: `scons` (repo root); flash: `scons flash`; distributable: `scons fw_dist`.
+  - Build this app (fap): `./fbt fap_flipperpg` (macOS/Linux) or `.bt.cmd fap_flipperpg` (Windows).
   - Deploy compiled apps to device: `scons fap_deploy` (uses `scripts/storage.py`).
 
-- **Helpful files to read before coding**
-  - `SConstruct` (root build graph and aliases)
-  - `site_scons/environ.scons` and `site_scons/commandline.scons` (flags & toolchain setup)
-  - `applications_user/FlippeRPG/` (example user app layout)
-  - `scripts/` (helper utilities such as `flash.py`, `storage.py`, `lint.py`)
-  - `.github/workflows/*` (CI steps and test matrix to replicate locally)
+- **SCons conventions**:
+  - Each component has a `SConscript`; keep build logic there so `SConstruct` sees targets.
+  - Use existing aliases (`flash`, `fap_dist`, `lint`, `format`) instead of ad-hoc scripts.
 
-If anything in this guide is unclear or you want more detail (examples for adding an SConscript, how to run the emulator/CI locally, or common env vars), tell me which area to expand and I'll iterate.
+- **Patterns & code style**:
+  - C apps follow `applications[_user]/<app>/` layout with per-app `SConscript`/metadata.
+  - Python tooling uses `black`; lints via `scons lint_py` / `scons format_py`.
+  - Debug helpers: `scons debug`, `scons openocd`, `scons blackmagic` (see `SConstruct`).
+
+- **Integration & deployment**:
+  - `fap_dist` and `fap_deploy` handle external app packaging/push; see `SConstruct` and `scripts/storage.py`.
+  - Updater/self-update flows live in `dist` targets guarded by `fullenv`.
+
+- **Where to start when changing behavior**:
+  - Build/tooling: `SConstruct`, `site_scons/environ.scons`, `site_scons/cc.scons`.
+  - App logic: `applications_user/FlippeRPG/` subdirs listed above; entry `FlippeRPG.c`.
+  - Core runtime/platform: `furi/`, `lib/` and their `SConscript` files.
+
+- **Helpful files to read**: `SConstruct`; `site_scons/environ.scons`; `site_scons/commandline.scons`; `applications_user/FlippeRPG/`; `scripts/` (e.g., `flash.py`, `storage.py`, `lint.py`); `.github/workflows/*` for CI steps.
+
+If anything is unclear or missing (e.g., preferred `fbt` flags, adding a new shrine/technique flow, or a sample `SConscript`), say so and I will tighten the guide.
