@@ -3,27 +3,31 @@
 #include <stdlib.h>
 #include <time.h>
 #include <stdint.h>
+#include <string.h>
+#include <stdio.h>
 
 #include "codex/codex.h"
 #include "signal/signal_engine.h"
 #include "techniques/techniques.h"
 #include "save/save_system.h"
+#include "core/utils.h"
 
 int32_t flippe_rpg_app(void* p) {
     (void)p;
     srand((unsigned)time(NULL));
 
     // Load or initialize Codex
-    Codex player_codex;
-    if(!load_codex_state(&player_codex)) {
+    Codex player_codex = {0};
+    const char* save_path = "codex.sav";
+    load_codex(&player_codex, save_path);
+    if(strlen(player_codex.codex_id) == 0) {
         init_codex(&player_codex, "Jason");
     }
 
     // Show Codex summary
-    FuriString* output = furi_string_alloc();
-    furi_string_printf(output, "Codex: %s\nXP: %d", player_codex.codex_id, player_codex.xp_total);
+    char output[64];
+    snprintf(output, sizeof(output), "Codex: %s\nXP: %d", player_codex.codex_id, player_codex.xp_total);
     popup_message(output);
-    furi_string_free(output);
 
     // Run signal loop (stubbed)
     start_signal_loop(&player_codex);
@@ -36,15 +40,15 @@ int32_t flippe_rpg_app(void* p) {
 
     // 🌀 Convergence check
     if (ready_for_convergence(&player_codex)) {
-        popup_message("🌀 The Codex hums. All signals align.");
-        player_codex.aura_state = AURA_ECHOFORGED;
+        popup_message("The Codex hums. All signals align.");
+        strncpy(player_codex.aura_trait, "Echoforged", sizeof(player_codex.aura_trait));
         player_codex.converged = true;
         // Optional: unlock new shrine, reset Echo log, or begin legacy mode
     }
 
 
     // Save progress
-    save_codex_state(&player_codex);
+    save_codex(&player_codex, save_path);
 
     return 0;
 }

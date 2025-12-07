@@ -6,9 +6,11 @@
 #include "../shrine/shrine.h"
 #include "../xp/xp_engine.h"
 #include "../codex/codex.h"
+#include "../core/utils.h"
 
 // Generates a simple hash from raw signal data
 char* hash_signal(const char* raw_data) {
+    (void)raw_data; // unused in stubbed hash
     // Stubbed hash function — replace with real hash later
     static char hash[16];
     snprintf(hash, sizeof(hash), "SIG%04X", rand() % 65536);
@@ -23,8 +25,9 @@ int calculate_signal_xp(Codex* codex, const char* hash) {
     // Check how many times this signal has been scanned in the last 24 hours
     for (int i = 0; i < MAX_SIGNALS; i++) {
         if (strcmp(codex->signal_history[i].hash, hash) == 0) {
-            double hours = difftime(now, codex->signal_history[i].timestamp) / 3600.0;
-            if (hours < 24.0) repeat_count++;
+            float seconds = (float)difftime(now, codex->signal_history[i].timestamp);
+            float hours = seconds / 3600.0f;
+            if (hours < 24.0f) repeat_count++;
         }
     }
 
@@ -54,19 +57,16 @@ void start_signal_loop(Codex* codex) {
 }
 
 // Handles NFC scans and shrine rituals
-void on_nfc_scan(const char* tag_id) {
-    // Check if player is near the Bind Whisper shrine
-    if (is_near_bind_whisper_shrine()) {
-        trigger_bind_whisper_shrine(&player_codex, tag_id);
-    }
+void on_nfc_scan(Codex* codex, const char* tag_id) {
+    (void)codex;
+    (void)tag_id;
+    // TODO: integrate Bind Whisper shrine proximity once available
 }
 
 SignalType get_signal_type(Codex* codex, const char* signal_hash) {
-    for (int i = 0; i < codex->signal_log_count; i++) {
-        if (strcmp(codex->signal_log[i].hash, signal_hash) == 0) {
-            return codex->signal_log[i].type;
-        }
-    }
+    // Current Codex tracks `signal_history` without type metadata; return unknown for now
+    (void)codex;
+    (void)signal_hash;
     return SIGNAL_UNKNOWN;
 }
 
