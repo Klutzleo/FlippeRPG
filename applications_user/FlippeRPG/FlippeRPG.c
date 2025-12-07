@@ -1,6 +1,6 @@
 #include <furi.h>
 #include <gui/gui.h>
-#include <dialogs/dialogs.h>
+#include <notification/notification_messages.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -24,15 +24,11 @@ int32_t flippe_rpg_app(void* p) {
         init_codex(&player_codex, "Jason");
     }
 
-    // Show Codex summary on-screen
-    DialogsApp* dialogs = furi_record_open(RECORD_DIALOGS);
-    DialogMessage* msg = dialog_message_alloc();
-    dialog_message_set_header(msg, "FlippeRPG", 64, 0, AlignCenter, AlignTop);
-    dialog_message_set_text(msg, "Codex loaded", 64, 32, AlignCenter, AlignCenter);
-    dialog_message_set_buttons(msg, NULL, "OK", NULL);
-    dialog_message_show(dialogs, msg);
-    dialog_message_free(msg);
-    furi_record_close(RECORD_DIALOGS);
+    // Quick visible cue: blink green LED once
+    NotificationApp* notification = furi_record_open(RECORD_NOTIFICATION);
+    notification_message_block(notification, &sequence_single_vibro); // short haptic
+    notification_message_block(notification, &sequence_blink_green_100);
+    furi_record_close(RECORD_NOTIFICATION);
 
     // Run signal loop (stubbed)
     start_signal_loop(&player_codex);
