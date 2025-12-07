@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <time.h>
+#include <furi.h>
 
 #define AURA_FLAMEBOUND   "Flamebound"
 #define AURA_WHISPERED    "Whispered"
@@ -16,7 +16,7 @@ void attempt_shrine(Codex* codex, ShrineID shrine_id, bool ritual_success) {
 
     if (ritual_success) {
         shrine->completed = true;
-        shrine->last_completed_time = time(NULL);
+        shrine->last_completed_time = furi_get_tick();
 
         assign_aura(codex, shrine_id);
         printf("[Shrine] Shrine %d completed. Aura assigned: %s\n",
@@ -40,13 +40,23 @@ void attempt_shrine(Codex* codex, ShrineID shrine_id, bool ritual_success) {
     }
 }
 
+// Basic trigger wrapper for now; hooks in signal flow
+void trigger_shrine(Codex* codex, ShrineID shrine_id, SignalType signal_type) {
+    (void)signal_type;
+    attempt_shrine(codex, shrine_id, true);
+}
+
+bool is_ritual_complete(Codex* codex, ShrineID shrine_id) {
+    return codex->shrine_progress[shrine_id].completed;
+}
+
 // Mark shrine as resettable (corruption unlocks replay)
 void reset_shrine(Codex* codex, ShrineID shrine_id) {
     ShrineProgress* shrine = &codex->shrine_progress[shrine_id];
     if (shrine->completed && shrine->resettable) {
         shrine->completed = false;
         shrine->resettable = false;
-        shrine->last_visited = time(NULL);
+        shrine->last_visited = furi_get_tick();
         printf("[Shrine] Shrine %d reset — ritual can be replayed.\n", shrine_id);
     } else {
         printf("[Shrine] Shrine %d cannot be reset.\n", shrine_id);
@@ -57,7 +67,7 @@ void reset_shrine(Codex* codex, ShrineID shrine_id) {
 void complete_shrine(Codex* codex, ShrineID shrine_id) {
     ShrineProgress* shrine = &codex->shrine_progress[shrine_id];
     shrine->completed = true;
-    shrine->last_completed_time = time(NULL);
+    shrine->last_completed_time = furi_get_tick();
 
     assign_aura(codex, shrine_id);
     printf("[Shrine] Shrine %d completed. Aura assigned: %s\n",

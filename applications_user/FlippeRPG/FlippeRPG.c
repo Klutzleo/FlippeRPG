@@ -1,7 +1,6 @@
 #include <furi.h>
 #include <gui/gui.h>
 #include <stdlib.h>
-#include <time.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
@@ -14,7 +13,7 @@
 
 int32_t flippe_rpg_app(void* p) {
     (void)p;
-    srand((unsigned)time(NULL));
+    srand((unsigned)furi_get_tick());
 
     // Load or initialize Codex
     Codex player_codex = {0};

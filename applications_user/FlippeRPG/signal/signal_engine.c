@@ -1,8 +1,8 @@
 #include "signal_engine.h"
 #include <string.h>
 #include <stdlib.h>
-#include <time.h>
 #include <stdio.h>
+#include <furi.h>
 #include "../shrine/shrine.h"
 #include "../xp/xp_engine.h"
 #include "../codex/codex.h"
@@ -20,13 +20,13 @@ char* hash_signal(const char* raw_data) {
 // Calculates XP based on signal repetition and cooldown
 int calculate_signal_xp(Codex* codex, const char* hash) {
     int repeat_count = 0;
-    time_t now = time(NULL);
+    uint32_t now = furi_get_tick();
 
     // Check how many times this signal has been scanned in the last 24 hours
     for (int i = 0; i < MAX_SIGNALS; i++) {
         if (strcmp(codex->signal_history[i].hash, hash) == 0) {
-            float seconds = (float)difftime(now, codex->signal_history[i].timestamp);
-            float hours = seconds / 3600.0f;
+            uint32_t prev = codex->signal_history[i].timestamp;
+            float hours = (float)(now - prev) / 3600000.0f; // ticks->hours assuming ms ticks
             if (hours < 24.0f) repeat_count++;
         }
     }

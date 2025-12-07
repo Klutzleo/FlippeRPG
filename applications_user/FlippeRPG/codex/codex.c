@@ -1,8 +1,8 @@
 #include "codex.h"
 #include <string.h>
 #include <stdio.h>
-#include <time.h>
 #include <stdlib.h>
+#include <furi.h>
 #include "../narrative/echo_flavor.h"
 #include "../core/constants.h"
 #include "../echo/echo_fusion.h"
@@ -11,7 +11,7 @@
 // Initializes a new Codex for the player
 void init_codex(Codex* codex, const char* player_name) {
     // Seed RNG once at init for random flavor text
-    srand(time(NULL));
+    srand(furi_get_tick());
 
     // Set player name and generate a unique Codex ID
     strncpy(codex->player_name, player_name, sizeof(codex->player_name));
@@ -29,7 +29,7 @@ void init_codex(Codex* codex, const char* player_name) {
     memset(codex->techniques, 0, sizeof(codex->techniques));
 
     // Timestamp the save
-    codex->save_timestamp = time(NULL);
+    codex->save_timestamp = furi_get_tick();
 }
 
 // Logs a scanned signal and awards XP
@@ -42,7 +42,7 @@ void log_signal(Codex* codex, const char* signal_hash, int xp) {
     // Store new signal at the top
     strncpy(codex->signal_history[0].hash, signal_hash, sizeof(codex->signal_history[0].hash));
     codex->signal_history[0].xp_awarded = xp;
-    codex->signal_history[0].timestamp = time(NULL);
+    codex->signal_history[0].timestamp = furi_get_tick();
 
     // Add XP to total
     codex->xp_total += xp;
@@ -76,7 +76,7 @@ void log_encounter(Codex* codex, const char* signalborn_id, const char* aura, bo
     // Store new encounter at the top
     strncpy(codex->encounter_log[0].signalborn_id, signalborn_id, sizeof(codex->encounter_log[0].signalborn_id));
     strncpy(codex->encounter_log[0].aura, aura, sizeof(codex->encounter_log[0].aura));
-    codex->encounter_log[0].timestamp = time(NULL);
+    codex->encounter_log[0].timestamp = furi_get_tick();
     codex->encounter_log[0].echo_transferred = echo_transferred;
 
     // 🔮 Echo mechanics hook
