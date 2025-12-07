@@ -1,3 +1,4 @@
+#ifdef UNIT_TEST
 #include "../codex/codex.h"
 #include "../signal/signal_engine.h"
 
@@ -7,3 +8,4 @@ int main(void) {
     enter_manual_signal(&test_codex, "MANUAL-1234");
     return 0;
 }
+#endif

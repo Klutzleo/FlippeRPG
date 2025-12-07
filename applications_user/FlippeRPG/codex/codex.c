@@ -130,64 +130,6 @@ void codex_use_technique(Codex* codex, const char* name) {
     printf("[Codex] Technique not found or not unlocked: %s\n", name);
 }
 
-void assign_aura(Codex* codex, ShrineID shrine_id) {
-    switch (shrine_id) {
-        case SHRINE_FLAME_REACH:
-            strncpy(codex->aura_trait, "Flamebound", sizeof(codex->aura_trait));
-            break;
-        case SHRINE_BIND_WHISPER:
-            strncpy(codex->aura_trait, "Whispered", sizeof(codex->aura_trait));
-            break;
-        case SHRINE_CAVE_THAT_LISTENS:
-            strncpy(codex->aura_trait, "Echo-Touched", sizeof(codex->aura_trait));
-            break;
-        default:
-            strncpy(codex->aura_trait, "Wandering", sizeof(codex->aura_trait));
-            break;
-    }
-}
-
-// Attempts a shrine ritual; success or failure determines outcome
-void attempt_shrine(Codex* codex, ShrineID shrine_id, bool ritual_success) {
-    if (ritual_success) {
-        // Shrine completed normally
-        codex->shrine_progress[shrine_id].completed = true;
-        assign_aura(codex, shrine_id);
-        printf("[Shrine] Shrine %d completed. Aura assigned: %s\n", shrine_id, codex->aura_trait);
-
-        // 🔮 After shrine completion, check for lineage convergence
-        if (ready_for_convergence(codex)) {
-            process_echo(codex, false, false); // lineage trigger
-        }
-    } else {
-        // Ritual failed
-        printf("[Shrine] Shrine %d ritual failed.\n", shrine_id);
-
-        // 🔮 50% chance corruption on failure
-        if (rand() % 100 < 50) {
-            process_echo(codex, false, true); // corruption event
-        } else {
-            printf("[Shrine] Failure passed without corruption.\n");
-        }
-    }
-}
-
-// Marks a shrine as completed and assigns aura
-void complete_shrine(Codex* codex, ShrineID shrine_id) {
-    // Mark shrine as completed
-    codex->shrine_progress[shrine_id].completed = true;
-
-    // Assign aura trait based on shrine
-    assign_aura(codex, shrine_id);
-
-    printf("[Shrine] Shrine %d completed. Aura assigned: %s\n", shrine_id, codex->aura_trait);
-
-    // 🔮 After shrine completion, check for lineage convergence
-    if (ready_for_convergence(codex)) {
-        process_echo(codex, false, false); // lineage trigger
-    }
-}
-
 void mark_echo_corrupted(Codex* codex, const char* echo_id) {
     for (int i = 0; i < MAX_ECHO_LOG; i++) {
         if (strcmp(codex->echo_log[i].echo_id, echo_id) == 0) {
@@ -224,27 +166,6 @@ bool ready_for_convergence(Codex* codex) {
     }
 
     return true;
-}
-
-void echo_event(EchoState state) {
-    switch (state) {
-        case ECHO_FUSION:
-            popup_message(ECHO_FUSION_TEXT[rand() % 3]);
-            break;
-        case ECHO_CORRUPTION:
-            popup_message(ECHO_CORRUPTION_TEXT[rand() % 3]);
-            break;
-        case ECHO_LINEAGE:
-            popup_message(ECHO_LINEAGE_TEXT[rand() % 3]);
-            break;
-        case ECHO_LEGACY:
-            // Placeholder until you decide legacy behavior
-            popup_message("A legacy echo stirs... its memory feels ancient.");
-            break;
-        default:
-            // Optional: catch-all for future states
-            break;
-    }
 }
 
 void process_echo(Codex* codex, bool fusion_success, bool corruption_detected) {
@@ -284,18 +205,4 @@ void process_echo(Codex* codex, bool fusion_success, bool corruption_detected) {
         strncpy(codex->aura_trait, "Signalborn", sizeof(codex->aura_trait));
         printf("[Codex] Lineage convergence achieved. Aura: %s\n", codex->aura_trait);
     }
-}
-
-void reset_shrine(Codex* codex, ShrineID shrine_id) {
-    if (codex->shrine_progress[shrine_id].resettable) {
-        codex->shrine_progress[shrine_id].completed = false;
-        codex->shrine_progress[shrine_id].resettable = false;
-        printf("[Shrine] Shrine %d has been reset. Ritual may be replayed.\n", shrine_id);
-    } else {
-        printf("[Shrine] Shrine %d cannot be reset right now.\n", shrine_id);
-    }
-}
-
-void award_xp(Codex* codex, int amount) {
-    codex->xp_total += amount;
 }

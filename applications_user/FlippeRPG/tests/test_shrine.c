@@ -1,3 +1,4 @@
+#ifdef UNIT_TEST
 #include "../codex/codex.h"
 #include "../shrine/shrine.h"
 #include "../shrine/shrine_definitions.h"
@@ -38,3 +39,4 @@ int main() {
 
     return 0;
 }
+#endif

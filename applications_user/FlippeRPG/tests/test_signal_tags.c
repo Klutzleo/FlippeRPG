@@ -1,3 +1,4 @@
+#ifdef UNIT_TEST
 #include "../shrine/shrine_tags.h"
 #include "../codex/codex.h"
 #include <assert.h>
@@ -21,3 +22,4 @@ int main(void) {
     printf("✅ Signal tag test passed: Shrine tag imprinted and scanned.\n");
     return 0;
 }
+#endif

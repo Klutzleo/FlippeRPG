@@ -1,3 +1,4 @@
+#ifdef UNIT_TEST
 #include "../codex/codex.h"
 #include "../signal/signal_fusion.h"
 #include <assert.h>
@@ -25,3 +26,4 @@ int main() {
 
     return 0;
 }
+#endif

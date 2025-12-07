@@ -2,9 +2,14 @@
 #include <string.h>
 #include <assert.h>
 #include "../codex/codex.h"
+#ifdef UNIT_TEST
+#include <stdio.h>
+#include <string.h>
+#include <assert.h>
+#include "../codex/codex.h"
 
 // Helper to print technique state
-void print_technique_state(Codex* codex, const char* name) {
+static void print_technique_state(Codex* codex, const char* name) {
     for (int i = 0; i < MAX_TECHNIQUES; i++) {
         if (strcmp(codex->techniques[i].name, name) == 0) {
             printf("[Technique] %s | Uses: %d | Mastered: %s\n",
@@ -33,3 +38,4 @@ int main() {
     printf("✅ Codex test passed: Pulse Open mastered after 10 uses.\n");
     return 0;
 }
+#endif
