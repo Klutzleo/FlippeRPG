@@ -29,9 +29,8 @@ int32_t flippe_rpg_app(void* p) {
     DialogMessage* msg = dialog_message_alloc();
     dialog_message_set_header(msg, "FlippeRPG", 64, 0, AlignCenter, AlignTop);
     dialog_message_set_text(msg, "Codex loaded", 64, 32, AlignCenter, AlignCenter);
-    dialog_message_set_buttons(msg, NULL, NULL, NULL);
+    dialog_message_set_buttons(msg, NULL, "OK", NULL);
     dialog_message_show(dialogs, msg);
-    furi_delay_ms(1200);
     dialog_message_free(msg);
     furi_record_close(RECORD_DIALOGS);
 
