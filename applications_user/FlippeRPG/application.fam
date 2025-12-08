@@ -4,7 +4,7 @@ apps = [
         name="FlippeRPG",
         apptype=FlipperAppType.EXTERNAL,
         entry_point="flippe_rpg_app",
-        stack_size=2048,
+        stack_size=8192,
         fap_category="User",
     )
 ]
