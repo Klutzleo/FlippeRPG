@@ -12,12 +12,14 @@
 #include "save/save_system.h"
 #include "core/utils.h"
 
+// Static Codex to avoid stack overflow (struct is ~5KB)
+static Codex player_codex = {0};
+
 int32_t flippe_rpg_app(void* p) {
     (void)p;
     srand((unsigned)furi_get_tick());
 
-    // Load or initialize Codex
-    Codex player_codex = {0};
+    // Load or initialize Codex (already static, so no stack pressure)
     const char* save_path = "codex.sav";
     load_codex(&player_codex, save_path);
     if(strlen(player_codex.codex_id) == 0) {
