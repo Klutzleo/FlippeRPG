@@ -4,6 +4,8 @@
 
 FlippeRPG uses sprites and animations for visual elements, particularly the **Campfire Multiplayer Scene**. This guide explains how to design, export, and integrate custom assets into the game.
 
+**Display Info:** Flipper Zero has a **128x64 pixel monochrome LCD display** (black and white only). All sprites must be designed in black and white for optimal visibility on the device.
+
 ## Current Implementation Status
 
 ### Text-Based Rendering (Current)
@@ -29,7 +31,7 @@ The code is **fully prepared** to swap text rendering for sprite rendering. You 
 - **Size:** 16x16 pixels (can scale to 8x8 if space is tight)
 - **Frames:** 3-4 frames of flickering fire
 - **Animation Speed:** 100-150ms per frame
-- **Style:** Simple pixel art, warm colors (yellows, oranges, reds)
+- **Style:** Simple pixel art in **black and white only** (use varying density of black pixels to show flickering effect, not colors)
 - **Format:** PNG with transparent background
 
 **Example Design:**
@@ -51,15 +53,35 @@ Frame 1:  Frame 2:  Frame 3:  Frame 4:
 - **Style:** Simple silhouettes or basic character poses
 - **Per-Player:** Different icons for each direction (↑↓←→) or player type
 
-**Variants to Create:**
-1. **North Arrow** - `arrow_north.png` (player above fire)
-2. **South Arrow** - `arrow_south.png` (your character, always at bottom)
-3. **East Arrow** - `arrow_east.png` (right side)
-4. **West Arrow** - `arrow_west.png` (left side)
+**Variants to Create (Basic - 4 directions):**
+1. **North** - `campfire_player_north.png` (player above fire)
+2. **South** - `campfire_player_south.png` (your character, always at bottom)
+3. **East** - `campfire_player_east.png` (right side)
+4. **West** - `campfire_player_west.png` (left side)
 
-**Alternative (Character-Based):**
-- Create small character icons instead of arrows
-- Example: Mage silhouette, Knight silhouette, etc.
+**Character Appearance Options:**
+You can support multiple character appearances (male, female, different styles, etc.):
+
+```
+assets/
+├── campfire_mage_m_north.png      # Male mage variant
+├── campfire_mage_m_south.png
+├── campfire_mage_m_east.png
+├── campfire_mage_m_west.png
+├── campfire_mage_f_north.png      # Female mage variant
+├── campfire_mage_f_south.png
+├── campfire_mage_f_east.png
+├── campfire_mage_f_west.png
+└── ... (repeat for other appearance types)
+```
+
+The game code can load the correct sprite based on player preference. See **Code Integration** section for example.
+
+**Design Ideas:**
+- **Stick figures** - Surprisingly effective on monochrome! Simple lines are highly visible, can show poses/poses distinctly (arms up, arms down, legs spread = unique silhouettes)
+- **Silhouettes** - Solid black shapes with minimal detail (fast to draw, very clear on monochrome)
+- **Icon-based** - Simple symbols per aura type (fire = flame shape, whisper = wavy lines, etc.)
+- **Directional indicators** - Different facing direction per cardinal position
 
 ### Pop-In/Fade Animation
 **Purpose:** Animate player appearance/disappearance when they join/leave the campfire
@@ -85,16 +107,19 @@ Frame 1:  Frame 2:  Frame 3:  Frame 4:
 ### Step 1: Create New Document
 ```
 File → New
-Width: 128px (for full sprite sheet, or individual 16x16 for each sprite)
-Height: 48px (for 3 frames of 16x16, stacked)
+Width: 128px (standard for single sprites or sprite sheets)
+Height: 64px (Flipper's actual screen height)
 Background: Transparent
+Color Mode: Black & White
+  (In Aseprite: Image → Mode → Indexed, then Color → Colormap → Black and White)
 ```
 
 ### Step 2: Design Fire Animation
 1. Create a new layer called "Fire"
-2. Draw 3-4 frames of flickering fire
-3. Use warm colors: #FF6B00 (orange), #FFD700 (gold), #FF0000 (red)
+2. Draw 3-4 frames of flickering fire using **only black pixels** on transparent background
+3. To simulate intensity/brightness: use denser pixel patterns for brighter frames, sparser patterns for dimmer flames
 4. Keep it small (16x16) to leave room for text/player names
+5. **Important:** Test on actual Flipper—monochrome rendering may look different than your color preview editor
 
 ### Step 3: Design Player Icons
 1. Create layers for each direction (North, South, East, West)
@@ -152,8 +177,37 @@ Image* fire_img = image_alloc();
 image_load(fire_img, "assets/campfire_fire.png");
 
 Image* player_north_img = image_alloc();
-image_load(player_north_img, "assets/campfire_north.png");
-// ... load other images
+image_load(player_north_img, "assets/campfire_player_north.png");
+// ... load other directional images
+```
+
+**For Multiple Appearances (Optional):**
+If you want male/female variants, store them by appearance type:
+```c
+// In Codex struct (codex/codex.h), add:
+typedef enum {
+    APPEARANCE_MAGE_MALE,
+    APPEARANCE_MAGE_FEMALE,
+    // ... other variants
+} AppearanceType;
+
+typedef struct {
+    // ... existing fields
+    AppearanceType appearance;  // Player's chosen appearance
+} Codex;
+
+// Then load based on player choice:
+const char* get_player_sprite_path(AppearanceType appearance, CardinalDir dir) {
+    const char* variants[NUM_APPEARANCES][4] = {
+        // APPEARANCE_MAGE_MALE
+        {"assets/campfire_mage_m_north.png", "assets/campfire_mage_m_south.png",
+         "assets/campfire_mage_m_east.png", "assets/campfire_mage_m_west.png"},
+        // APPEARANCE_MAGE_FEMALE
+        {"assets/campfire_mage_f_north.png", "assets/campfire_mage_f_south.png",
+         "assets/campfire_mage_f_east.png", "assets/campfire_mage_f_west.png"},
+    };
+    return variants[appearance][dir];
+}
 ```
 
 **Step 2: Draw Images in campfire_draw_callback()**
@@ -165,10 +219,13 @@ canvas_draw_icon(canvas, 55, 32, fire_img);  // Centered at 58, 35
 
 // Draw north player icon
 if(campfire_slots[CAMP_NORTH].active) {
-    canvas_draw_icon(canvas, 50, 15, player_north_img);
+    Image* player_sprite = image_alloc();
+    image_load(player_sprite, get_player_sprite_path(player_codex.appearance, CAMP_NORTH));
+    canvas_draw_icon(canvas, 50, 15, player_sprite);
     canvas_draw_str(canvas, 60, 23, campfire_slots[CAMP_NORTH].name);  // Name below icon
+    image_free(player_sprite);
 }
-// ... repeat for E, W, S
+// ... repeat for E, W, S directions
 ```
 
 **Step 3: Animate Frames**
@@ -219,28 +276,78 @@ canvas_draw_icon(canvas, 55, 32, current_fire);
 
 ### Fire Animation
 - **Flicker asymmetrically** - Real fire doesn't flicker evenly
-- **Use color shifts** - Not just size changes, vary orange/red intensity
-- **Add details** - Embers, smoke wisps make it feel alive
+- **Use density variation** - More black pixels = brighter/more intense flames, fewer pixels = dimmer flames
+- **Add details** - Embers, smoke wisps make it feel alive (all rendered in solid black on transparent)
+- **Test on actual device** - The Flipper's monochrome LCD may render patterns differently than your editor's color preview
 
-### Player Icons
-- **Make them distinctive** - Different symbols for different aura types?
-  - Flame aura: Fire symbol ✦
-  - Whispered aura: Wind/ripple symbol ≈
-  - Storm aura: Lightning symbol ⚡
-  - Echo aura: Circle/ripple symbol ◉
-- **Keep it simple** - Flipper screen is small, 8x8 pixels is tiny
-- **Test at actual size** - View in Aseprite at 100% zoom as it would appear
+### Player Icons - Stick Figures Rock on Monochrome
+**Yes, stick figures are perfect for Flipper's monochrome display!**
+
+Why stick figures work great:
+- **High contrast** - Clean lines show up perfectly on black and white
+- **Distinctive poses** - Easy to show different stances (arms up, arms down, legs spread = unique silhouettes)
+- **Fast to draw** - Quick iteration in Aseprite
+- **Scalable** - Works at any size from 8x8 to 16x16
+- **Personality** - Can show aura/mood with simple additions (halo = good, spiky = angry, etc.)
+
+**Stick figure variants with wizard accessories:**
+- **Wizard hat** - Triangle/cone shape on head (pointy = mage vibes)
+- **Magic wand/staff** - Single line extending from hand
+- **Robe** - Triangle/trapezoid body instead of stick body
+- **Spell effects** - Small stars/sparkles near wand
+- **Male/Female distinction** - Hat style (pointy vs wide brim), robe shape, or accessory choice
+
+**Quick examples (8x8 pixel stick figures as Signal Mages):**
+
+**Basic Mage with Hat:**
+```
+  ^        (wizard hat)
+  *        (head)
+ -*-       (body + wand)
+  |
+ / \       (legs)
+```
+
+**Robed Mage with Staff:**
+```
+  ^        (wizard hat)
+  *        (head)
+ /|\       (robe)
+/_|_\      (wide robe + staff)
+```
+
+**Female Mage with Wand & Stars:**
+```
+  ^        (pointy hat)
+  *     *  (head + sparkle)
+ /^\   |   (dress robe + wand)
+  |        (body)
+ / \       (legs)
+```
+
+**Aura-Specific Accessories:**
+- **Flamebound** - Spiky/jagged hat, fire wand with pointed tip
+- **Whispered** - Curved/wispy staff, flowing robe edges
+- **Stormtouched** - Lightning bolt on hat, zigzag wand
+- **Echoed** - Circular/spiral staff top, symmetrical design
+
+### Other Player Icon Approaches
+- **Silhouettes** - Solid black shapes with minimal detail (very visible, aura-specific shapes)
+- **Icon-based** - Simple symbols per aura type (fire = flame, whisper = wavy lines, storm = lightning bolt)
+- **Robed mages** - Triangular/hooded shape representing magic users
 
 ### Animation
 - **Keep frame count low** - More frames = larger file size
 - **Consistent timing** - Use same speed for all animations (150ms = good default)
 - **Subtle is better** - Don't make things too flashy; it should complement gameplay
 
-### Color Palette
-Recommended colors for Flipper (monochrome-friendly):
-- Fire: Use warm colors, but test on actual Flipper screen
-- Players: High contrast for visibility
-- Glow/Selection: Bright highlight color
+### Grayscale & Contrast for Monochrome Display
+**Important:** Flipper Zero's LCD is monochrome, not color:
+- Only **solid black** (opaque) and **white/transparent** (invisible) render properly
+- **No colors or grays** - they won't display as intended
+- **Design strategy:** Use solid black on transparent; vary density (pixel patterns) to simulate intensity/brightness
+- **Visibility:** High contrast is essential; thin lines (1-2 pixels) may be hard to see at actual size
+- **Testing:** What looks good in your editor preview may need adjustment when deployed to the device
 
 ---
 
@@ -254,9 +361,10 @@ Recommended colors for Flipper (monochrome-friendly):
 ### In-Game Testing
 1. Place PNG in `assets/` folder
 2. Update `FlippeRPG.c` to load and render it
-3. Build: `./fbt.cmd fap_flipperpg`
+3. Build: `./fbt.cmd fap_flipperpg` (Windows) or `./fbt fap_flipperpg` (Linux/macOS)
 4. Deploy to Flipper and test campfire scene
-5. Verify animation speed and visibility
+5. Verify animation speed and visibility on the **actual 128x64 monochrome LCD**
+6. **Critical:** Sprites that look good in your editor preview may need tweaking for the Flipper's display; be ready to iterate based on how they appear on the real device
 
 ---
 
