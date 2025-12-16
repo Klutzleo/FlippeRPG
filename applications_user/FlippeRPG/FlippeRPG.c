@@ -16,6 +16,9 @@
 #include "shrine/shrine.h"
 #include "core/utils.h"
 #include "core/constants.h"
+// Assets: icon animations compiled from root assets/icons
+#include <assets_icons.h>
+#include <gui/icon_animation.h>
 
 // View IDs
 enum {
@@ -58,6 +61,9 @@ static int last_duel_xp = 0;         // Track duel result
 static CampfirePlayer campfire_slots[MAX_CAMP_SLOTS] = {0};
 static int selected_camp_slot = CAMP_NORTH;  // Currently selected campfire slot
 static uint32_t last_scan_tick = 0;  // Last time we scanned for players
+
+// Campfire visuals
+static IconAnimation* campfire_fire_anim = NULL;
 
 // Shrine name and description lookup
 static const char* get_shrine_name(ShrineID id) {
@@ -330,8 +336,12 @@ static void campfire_draw_callback(Canvas* canvas, void* model) {
         canvas_draw_str(canvas, 8, 25, campfire_slots[CAMP_NORTH].name);
     }
     
-    // Fire in center
-    canvas_draw_str(canvas, 58, 35, "[*]");  // Simple fire symbol
+    // Fire in center: try animated icon, fallback to ASCII
+    if(campfire_fire_anim) {
+        canvas_draw_icon_animation(canvas, 55, 32, campfire_fire_anim);
+    } else {
+        canvas_draw_str(canvas, 58, 35, "[*]");
+    }
     
     // West player (left)
     if(campfire_slots[CAMP_WEST].active) {
@@ -548,6 +558,16 @@ int32_t flippe_rpg_app(void* p) {
     View* campfire_view = view_alloc();
     view_set_draw_callback(campfire_view, campfire_draw_callback);
     view_set_input_callback(campfire_view, campfire_input_callback);
+    // Allocate and tie campfire fire animation (from root assets/icons)
+    // Symbol is generated from folder name: assets/icons/.../Campfire_Fire_16x16
+    // When present, A_Campfire_Fire_16x16 will be declared in assets_icons.h
+    #ifdef A_Campfire_Fire_16x16
+    campfire_fire_anim = icon_animation_alloc(&A_Campfire_Fire_16x16);
+    if(campfire_fire_anim) {
+        view_tie_icon_animation(campfire_view, campfire_fire_anim);
+        icon_animation_start(campfire_fire_anim);
+    }
+    #endif
     view_dispatcher_add_view(view_dispatcher, VIEW_CAMPFIRE, campfire_view);
 
     // ==================== VIEW 7: CAMPFIRE PROFILE ====================
@@ -583,6 +603,11 @@ int32_t flippe_rpg_app(void* p) {
     view_free(shrine_view);
     view_free(shrine_detail_view);
     view_free(campfire_view);
+    if(campfire_fire_anim) {
+        icon_animation_stop(campfire_fire_anim);
+        icon_animation_free(campfire_fire_anim);
+        campfire_fire_anim = NULL;
+    }
     view_free(campfire_profile_view);
     view_free(technique_view);
     menu_free(menu);
