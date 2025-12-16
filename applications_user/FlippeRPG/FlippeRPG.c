@@ -13,50 +13,473 @@
 #include "signal/signal_engine.h"
 #include "techniques/techniques.h"
 #include "save/save_system.h"
+#include "shrine/shrine.h"
 #include "core/utils.h"
+#include "core/constants.h"
+
+// View IDs
+enum {
+    VIEW_MENU = 0,
+    VIEW_CODEX = 1,
+    VIEW_SIGNAL = 2,
+    VIEW_SHRINE_LIST = 3,
+    VIEW_SHRINE_DETAIL = 4,
+    VIEW_TECHNIQUE = 5,
+    VIEW_CAMPFIRE = 6,
+    VIEW_CAMPFIRE_PROFILE = 7,
+};
+
+// Campfire player slot positions (N, S, E, W)
+typedef enum {
+    CAMP_NORTH = 0,
+    CAMP_SOUTH = 1,
+    CAMP_EAST = 2,
+    CAMP_WEST = 3,
+    MAX_CAMP_SLOTS = 4
+} CampfireSlot;
+
+// Campfire player struct
+typedef struct {
+    char name[16];
+    char aura[16];
+    uint32_t last_seen_tick;  // Timeout tracking
+    bool active;  // Is this player currently visible?
+    int handshake_xp;  // XP awarded for this handshake
+} CampfirePlayer;
 
 // Static Codex to avoid stack overflow (struct is ~5KB)
 static Codex player_codex = {0};
 static ViewDispatcher* view_dispatcher = NULL;
+static uint32_t last_signal_xp = 0;  // Track last signal result for display
+static int selected_shrine = 0;      // Currently selected shrine for detail view
+static int last_duel_xp = 0;         // Track duel result
 
-// Custom view draw callback to show Codex info
-static void codex_view_draw_callback(Canvas* canvas, void* model) {
-    (void)model;
-    canvas_clear(canvas);
-    canvas_set_font(canvas, FontPrimary);
-    canvas_draw_str(canvas, 2, 12, "FlippeRPG Codex");
-    
-    canvas_set_font(canvas, FontSecondary);
-    char line1[64], line2[64], line3[64], line4[64];
-    snprintf(line1, sizeof(line1), "Name: %s", player_codex.player_name);
-    snprintf(line2, sizeof(line2), "ID: %s", player_codex.codex_id);
-    snprintf(line3, sizeof(line3), "XP: %d", player_codex.xp_total);
-    snprintf(line4, sizeof(line4), "Duel XP: %d", player_codex.duel_xp);
-    
-    canvas_draw_str(canvas, 2, 28, line1);
-    canvas_draw_str(canvas, 2, 40, line2);
-    canvas_draw_str(canvas, 2, 52, line3);
-    canvas_draw_str(canvas, 2, 62, line4);
+// Campfire state
+static CampfirePlayer campfire_slots[MAX_CAMP_SLOTS] = {0};
+static int selected_camp_slot = CAMP_NORTH;  // Currently selected campfire slot
+static uint32_t last_scan_tick = 0;  // Last time we scanned for players
+
+// Shrine name and description lookup
+static const char* get_shrine_name(ShrineID id) {
+    switch(id) {
+        case SHRINE_CAVE_THAT_LISTENS: return "Cave That Listens";
+        case SHRINE_FLAME_REACH: return "Flame Reach";
+        case SHRINE_BIND_WHISPER: return "Bind Whisper";
+        case SHRINE_THREAD_TOUCH: return "Thread Touch";
+        case SHRINE_ECHO_TOUCHED: return "Echo Touched";
+        default: return "Unknown Shrine";
+    }
 }
 
-// Menu callback
-static void menu_callback(void* context, uint32_t index) {
+static const char* get_shrine_description(ShrineID id) {
+    switch(id) {
+        case SHRINE_CAVE_THAT_LISTENS: return "Listen to SubGHz waves";
+        case SHRINE_FLAME_REACH: return "Absorb infrared signals";
+        case SHRINE_BIND_WHISPER: return "Feel NFC vibrations";
+        case SHRINE_THREAD_TOUCH: return "Touch GPIO connections";
+        case SHRINE_ECHO_TOUCHED: return "Fuse signal echoes";
+        default: return "A mysterious shrine";
+    }
+}
+
+static const char* get_aura_name(ShrineID id) {
+    switch(id) {
+        case SHRINE_CAVE_THAT_LISTENS: return "Stormtouched";
+        case SHRINE_FLAME_REACH: return "Flamebound";
+        case SHRINE_BIND_WHISPER: return "Whispered";
+        case SHRINE_ECHO_TOUCHED: return "Echoforged";
+        case SHRINE_THREAD_TOUCH: return "Threaded";
+        default: return "Unknown";
+    }
+}
+
+// ==================== MENU VIEW ====================
+static void main_menu_callback(void* context, uint32_t index) {
     (void)context;
     switch(index) {
-        case 0: // View Codex - switch to codex view
-            view_dispatcher_switch_to_view(view_dispatcher, 1);
+        case 0: // Absorb Signals
+            view_dispatcher_switch_to_view(view_dispatcher, VIEW_SIGNAL);
             break;
-        default: // Exit
+        case 1: // Shrines
+            selected_shrine = 0;  // Reset to first shrine
+            view_dispatcher_switch_to_view(view_dispatcher, VIEW_SHRINE_LIST);
+            break;
+        case 2: // Techniques
+            view_dispatcher_switch_to_view(view_dispatcher, VIEW_TECHNIQUE);
+            break;
+        case 3: // Multiplayer (Campfire)
+            selected_camp_slot = CAMP_NORTH;
+            last_scan_tick = furi_get_tick();
+            // Populate campfire from encounter log
+            memset(campfire_slots, 0, sizeof(campfire_slots));
+            for(int i = 0; i < MAX_ENCOUNTERS && i < MAX_CAMP_SLOTS; i++) {
+                if(player_codex.encounter_log[i].signalborn_id[0] != 0) {
+                    strncpy(campfire_slots[i].name, player_codex.encounter_log[i].signalborn_id, sizeof(campfire_slots[i].name));
+                    strncpy(campfire_slots[i].aura, player_codex.encounter_log[i].aura, sizeof(campfire_slots[i].aura));
+                    campfire_slots[i].last_seen_tick = furi_get_tick();
+                    campfire_slots[i].active = true;
+                    campfire_slots[i].handshake_xp = 2;  // Auto-handshake XP
+                }
+            }
+            view_dispatcher_switch_to_view(view_dispatcher, VIEW_CAMPFIRE);
+            break;
+        case 4: // Status/Codex
+            view_dispatcher_switch_to_view(view_dispatcher, VIEW_CODEX);
+            break;
+        case 5: // Exit
             view_dispatcher_stop(view_dispatcher);
             break;
     }
 }
 
-// Custom view input callback to handle back button
-static bool codex_view_input_callback(InputEvent* event, void* context) {
+// ==================== CODEX STATUS VIEW ====================
+static void codex_view_draw_callback(Canvas* canvas, void* model) {
+    (void)model;
+    canvas_clear(canvas);
+    canvas_set_font(canvas, FontPrimary);
+    canvas_draw_str(canvas, 2, 12, "Codex Status");
+    
+    canvas_set_font(canvas, FontSecondary);
+    char line1[64], line2[64], line3[64], line4[64], line5[64];
+    snprintf(line1, sizeof(line1), "Name: %s", player_codex.player_name);
+    snprintf(line2, sizeof(line2), "ID: %s", player_codex.codex_id);
+    snprintf(line3, sizeof(line3), "Signal XP: %d", player_codex.xp_total);
+    snprintf(line4, sizeof(line4), "Duel XP: %d", player_codex.duel_xp);
+    snprintf(line5, sizeof(line5), "Aura: %s", player_codex.aura_trait[0] ? player_codex.aura_trait : "Unbound");
+    
+    canvas_draw_str(canvas, 2, 28, line1);
+    canvas_draw_str(canvas, 2, 40, line2);
+    canvas_draw_str(canvas, 2, 52, line3);
+    canvas_draw_str(canvas, 2, 62, line4);
+    canvas_draw_str(canvas, 2, 64 + 12, line5);
+}
+
+// ==================== SIGNAL ABSORPTION VIEW ====================
+static void signal_view_draw_callback(Canvas* canvas, void* model) {
+    (void)model;
+    canvas_clear(canvas);
+    canvas_set_font(canvas, FontPrimary);
+    canvas_draw_str(canvas, 2, 12, "Signal Absorption");
+    
+    canvas_set_font(canvas, FontSecondary);
+    canvas_draw_str(canvas, 2, 28, "Scanning for signals...");
+    
+    char xp_line[64];
+    snprintf(xp_line, sizeof(xp_line), "Last Gain: +%lu XP", last_signal_xp);
+    canvas_draw_str(canvas, 2, 52, xp_line);
+    
+    canvas_draw_str(canvas, 2, 64, "Press OK to scan");
+}
+
+static bool signal_view_input_callback(InputEvent* event, void* context) {
+    (void)context;
+    if(event->type == InputTypeShort) {
+        if(event->key == InputKeyOk) {
+            // Trigger signal scan
+            start_signal_loop(&player_codex);
+            last_signal_xp = 5;  // Simulate XP gain
+            return true;
+        }
+        else if(event->key == InputKeyBack) {
+            view_dispatcher_switch_to_view(view_dispatcher, VIEW_MENU);
+            return true;
+        }
+    }
+    return false;
+}
+
+// ==================== SHRINE VIEW ====================
+static void shrine_view_draw_callback(Canvas* canvas, void* model) {
+    (void)model;
+    canvas_clear(canvas);
+    canvas_set_font(canvas, FontPrimary);
+    canvas_draw_str(canvas, 2, 12, "Shrines");
+    
+    canvas_set_font(canvas, FontSecondary);
+    
+    // Display all shrines with their status
+    for(int i = 0; i < NUM_SHRINES; i++) {
+        ShrineProgress* shrine = &player_codex.shrine_progress[i];
+        const char* shrine_name = get_shrine_name(i);
+        const char* status = shrine->completed ? "[X]" : "[ ]";
+        
+        char shrine_line[64];
+        snprintf(shrine_line, sizeof(shrine_line), "%s %s", status, shrine_name);
+        
+        // Highlight selected shrine
+        if(i == selected_shrine) {
+            canvas_draw_str(canvas, 0, 24 + (i * 10), ">");
+            canvas_draw_str(canvas, 8, 24 + (i * 10), shrine_line);
+        } else {
+            canvas_draw_str(canvas, 2, 24 + (i * 10), shrine_line);
+        }
+    }
+    
+    canvas_draw_str(canvas, 2, 64, "OK: View | Back: Menu");
+}
+
+static bool shrine_view_input_callback(InputEvent* event, void* context) {
+    (void)context;
+    if(event->type == InputTypeShort) {
+        if(event->key == InputKeyUp) {
+            if(selected_shrine > 0) selected_shrine--;
+            return true;
+        }
+        else if(event->key == InputKeyDown) {
+            if(selected_shrine < NUM_SHRINES - 1) selected_shrine++;
+            return true;
+        }
+        else if(event->key == InputKeyOk) {
+            view_dispatcher_switch_to_view(view_dispatcher, VIEW_SHRINE_DETAIL);
+            return true;
+        }
+        else if(event->key == InputKeyBack) {
+            view_dispatcher_switch_to_view(view_dispatcher, VIEW_MENU);
+            return true;
+        }
+    }
+    return false;
+}
+
+// ==================== SHRINE DETAIL VIEW ====================
+static void shrine_detail_draw_callback(Canvas* canvas, void* model) {
+    (void)model;
+    canvas_clear(canvas);
+    canvas_set_font(canvas, FontPrimary);
+    
+    const char* shrine_name = get_shrine_name(selected_shrine);
+    canvas_draw_str(canvas, 2, 12, shrine_name);
+    
+    canvas_set_font(canvas, FontSecondary);
+    
+    ShrineProgress* shrine = &player_codex.shrine_progress[selected_shrine];
+    
+    // Shrine description
+    const char* desc = get_shrine_description(selected_shrine);
+    canvas_draw_str(canvas, 2, 28, "Ritual:");
+    canvas_draw_str(canvas, 2, 38, desc);
+    
+    // Aura trait
+    const char* aura = get_aura_name(selected_shrine);
+    char aura_line[64];
+    snprintf(aura_line, sizeof(aura_line), "Aura: %s", aura);
+    canvas_draw_str(canvas, 2, 50, aura_line);
+    
+    // Status
+    char status_line[64];
+    if(shrine->completed) {
+        snprintf(status_line, sizeof(status_line), "Status: COMPLETED");
+    } else {
+        snprintf(status_line, sizeof(status_line), "Status: LOCKED");
+    }
+    canvas_draw_str(canvas, 2, 62, status_line);
+}
+
+static bool shrine_detail_input_callback(InputEvent* event, void* context) {
+    (void)context;
+    if(event->type == InputTypeShort) {
+        if(event->key == InputKeyOk) {
+            // Attempt the ritual
+            if(!player_codex.shrine_progress[selected_shrine].completed) {
+                // Simulate ritual success (70% chance)
+                bool success = (rand() % 100) < 70;
+                attempt_shrine(&player_codex, selected_shrine, success);
+                
+                // Return to list to see updated status
+                view_dispatcher_switch_to_view(view_dispatcher, VIEW_SHRINE_LIST);
+            }
+            return true;
+        }
+        else if(event->key == InputKeyBack) {
+            view_dispatcher_switch_to_view(view_dispatcher, VIEW_SHRINE_LIST);
+            return true;
+        }
+    }
+    return false;
+}
+
+// ==================== CAMPFIRE VIEW ====================
+static void campfire_draw_callback(Canvas* canvas, void* model) {
+    (void)model;
+    canvas_clear(canvas);
+    
+    // Title
+    canvas_set_font(canvas, FontPrimary);
+    canvas_draw_str(canvas, 2, 12, "Campfire");
+    
+    canvas_set_font(canvas, FontSecondary);
+    
+    // Draw the campfire scene (text-based for now, will upgrade to sprites)
+    //
+    //        [N] (North)
+    //        name
+    //          |
+    //  [W]---(FIRE)---[E]
+    //  name    :)     name
+    //          |
+    //        (You)
+    //        [S]
+    //
+    
+    // North player (top)
+    if(campfire_slots[CAMP_NORTH].active) {
+        const char* marker = (selected_camp_slot == CAMP_NORTH) ? ">" : " ";
+        canvas_draw_str(canvas, 2, 25, marker);
+        canvas_draw_str(canvas, 8, 25, campfire_slots[CAMP_NORTH].name);
+    }
+    
+    // Fire in center
+    canvas_draw_str(canvas, 58, 35, "[*]");  // Simple fire symbol
+    
+    // West player (left)
+    if(campfire_slots[CAMP_WEST].active) {
+        const char* marker = (selected_camp_slot == CAMP_WEST) ? ">" : " ";
+        canvas_draw_str(canvas, 2, 35, marker);
+        canvas_draw_str(canvas, 8, 35, campfire_slots[CAMP_WEST].name);
+    }
+    
+    // East player (right)
+    if(campfire_slots[CAMP_EAST].active) {
+        const char* marker = (selected_camp_slot == CAMP_EAST) ? ">" : " ";
+        canvas_draw_str(canvas, 80, 35, marker);
+        canvas_draw_str(canvas, 86, 35, campfire_slots[CAMP_EAST].name);
+    }
+    
+    // You (South, bottom)
+    canvas_draw_str(canvas, 53, 50, "(You)");
+    const char* you_marker = (selected_camp_slot == CAMP_SOUTH) ? ">" : " ";
+    canvas_draw_str(canvas, 48, 50, you_marker);
+    
+    canvas_set_font(canvas, FontSecondary);
+    canvas_draw_str(canvas, 2, 62, "Arrow: Select | OK: Profile");
+}
+
+static bool campfire_input_callback(InputEvent* event, void* context) {
+    (void)context;
+    if(event->type == InputTypeShort) {
+        if(event->key == InputKeyUp) {
+            selected_camp_slot = CAMP_NORTH;
+            return true;
+        }
+        else if(event->key == InputKeyDown) {
+            selected_camp_slot = CAMP_SOUTH;
+            return true;
+        }
+        else if(event->key == InputKeyLeft) {
+            selected_camp_slot = CAMP_WEST;
+            return true;
+        }
+        else if(event->key == InputKeyRight) {
+            selected_camp_slot = CAMP_EAST;
+            return true;
+        }
+        else if(event->key == InputKeyOk) {
+            if(selected_camp_slot != CAMP_SOUTH && campfire_slots[selected_camp_slot].active) {
+                view_dispatcher_switch_to_view(view_dispatcher, VIEW_CAMPFIRE_PROFILE);
+            }
+            return true;
+        }
+        else if(event->key == InputKeyBack) {
+            view_dispatcher_switch_to_view(view_dispatcher, VIEW_MENU);
+            return true;
+        }
+    }
+    return false;
+}
+
+// ==================== CAMPFIRE PLAYER PROFILE VIEW ====================
+static void campfire_profile_draw_callback(Canvas* canvas, void* model) {
+    (void)model;
+    canvas_clear(canvas);
+    
+    CampfirePlayer* player = &campfire_slots[selected_camp_slot];
+    
+    canvas_set_font(canvas, FontPrimary);
+    canvas_draw_str(canvas, 2, 12, player->name);
+    
+    canvas_set_font(canvas, FontSecondary);
+    
+    char aura_line[64];
+    snprintf(aura_line, sizeof(aura_line), "Aura: %s", player->aura);
+    canvas_draw_str(canvas, 2, 28, aura_line);
+    
+    // Handshake info
+    canvas_draw_str(canvas, 2, 40, "Handshake: +2 XP");
+    
+    canvas_draw_str(canvas, 2, 52, "Options:");
+    canvas_draw_str(canvas, 2, 62, "L: Duel | R: Echo");
+}
+
+static bool campfire_profile_input_callback(InputEvent* event, void* context) {
+    (void)context;
+    if(event->type == InputTypeShort) {
+        if(event->key == InputKeyLeft) {
+            // Duel selected
+            int xp = (rand() % 100) < 60 ? 15 : 5;  // 60% win = 15 XP, lose = 5 XP
+            update_duel_xp(&player_codex, xp);
+            last_duel_xp = xp;
+            // Return to campfire
+            view_dispatcher_switch_to_view(view_dispatcher, VIEW_CAMPFIRE);
+            return true;
+        }
+        else if(event->key == InputKeyRight) {
+            // Echo exchange
+            campfire_slots[selected_camp_slot].handshake_xp = 0;  // Already got handshake
+            view_dispatcher_switch_to_view(view_dispatcher, VIEW_CAMPFIRE);
+            return true;
+        }
+        else if(event->key == InputKeyBack) {
+            view_dispatcher_switch_to_view(view_dispatcher, VIEW_CAMPFIRE);
+            return true;
+        }
+    }
+    return false;
+}
+
+// ==================== TECHNIQUE VIEW ====================
+static void technique_view_draw_callback(Canvas* canvas, void* model) {
+    (void)model;
+    canvas_clear(canvas);
+    canvas_set_font(canvas, FontPrimary);
+    canvas_draw_str(canvas, 2, 12, "Techniques");
+    
+    canvas_set_font(canvas, FontSecondary);
+    
+    // Display unlocked techniques
+    int display_count = 0;
+    for(int i = 0; i < MAX_TECHNIQUES && display_count < 3; i++) {
+        TechniqueProgress* tech = &player_codex.techniques[i];
+        if(tech->name[0] != 0 && tech->unlocked) {
+            char tech_line[64];
+            const char* mastery = tech->mastered ? " [MASTERED]" : "";
+            snprintf(tech_line, sizeof(tech_line), "%s (x%d%s)", tech->name, tech->uses, mastery);
+            canvas_draw_str(canvas, 2, 28 + (display_count * 12), tech_line);
+            display_count++;
+        }
+    }
+    
+    if(display_count == 0) {
+        canvas_draw_str(canvas, 2, 28, "No techniques unlocked");
+        canvas_draw_str(canvas, 2, 40, "Complete shrines to gain power");
+    }
+    
+    canvas_draw_str(canvas, 2, 64, "Back: Return to Menu");
+}
+
+static bool technique_view_input_callback(InputEvent* event, void* context) {
     (void)context;
     if(event->type == InputTypeShort && event->key == InputKeyBack) {
-        view_dispatcher_switch_to_view(view_dispatcher, 0);
+        view_dispatcher_switch_to_view(view_dispatcher, VIEW_MENU);
+        return true;
+    }
+    return false;
+}
+
+// ==================== GENERIC BACK BUTTON ====================
+static bool generic_back_callback(InputEvent* event, void* context) {
+    (void)context;
+    if(event->type == InputTypeShort && event->key == InputKeyBack) {
+        view_dispatcher_switch_to_view(view_dispatcher, VIEW_MENU);
         return true;
     }
     return false;
@@ -84,33 +507,86 @@ int32_t flippe_rpg_app(void* p) {
     view_dispatcher = view_dispatcher_alloc();
     view_dispatcher_attach_to_gui(view_dispatcher, gui, ViewDispatcherTypeFullscreen);
 
-    // Create menu view (view 0)
+    // ==================== VIEW 0: MAIN MENU ====================
     Menu* menu = menu_alloc();
-    menu_add_item(menu, "View Codex", NULL, 0, menu_callback, NULL);
-    menu_add_item(menu, "Exit", NULL, 1, menu_callback, NULL);
-    view_dispatcher_add_view(view_dispatcher, 0, menu_get_view(menu));
+    menu_add_item(menu, "Absorb Signals", NULL, 0, main_menu_callback, NULL);
+    menu_add_item(menu, "Shrines", NULL, 1, main_menu_callback, NULL);
+    menu_add_item(menu, "Techniques", NULL, 2, main_menu_callback, NULL);
+    menu_add_item(menu, "Multiplayer", NULL, 3, main_menu_callback, NULL);
+    menu_add_item(menu, "Status", NULL, 4, main_menu_callback, NULL);
+    menu_add_item(menu, "Exit", NULL, 5, main_menu_callback, NULL);
+    view_dispatcher_add_view(view_dispatcher, VIEW_MENU, menu_get_view(menu));
 
-    // Create custom codex view (view 1)
+    // ==================== VIEW 1: CODEX STATUS ====================
     View* codex_view = view_alloc();
     view_set_draw_callback(codex_view, codex_view_draw_callback);
-    view_set_input_callback(codex_view, codex_view_input_callback);
-    view_dispatcher_add_view(view_dispatcher, 1, codex_view);
+    view_set_input_callback(codex_view, generic_back_callback);
+    view_dispatcher_add_view(view_dispatcher, VIEW_CODEX, codex_view);
 
-    // Start at menu
-    view_dispatcher_switch_to_view(view_dispatcher, 0);
+    // ==================== VIEW 2: SIGNAL ABSORPTION ====================
+    View* signal_view = view_alloc();
+    view_set_draw_callback(signal_view, signal_view_draw_callback);
+    view_set_input_callback(signal_view, signal_view_input_callback);
+    view_dispatcher_add_view(view_dispatcher, VIEW_SIGNAL, signal_view);
+
+    // ==================== VIEW 3: SHRINE LIST ====================
+    View* shrine_view = view_alloc();
+    view_set_draw_callback(shrine_view, shrine_view_draw_callback);
+    view_set_input_callback(shrine_view, shrine_view_input_callback);
+    view_dispatcher_add_view(view_dispatcher, VIEW_SHRINE_LIST, shrine_view);
+
+    // ==================== VIEW 4: SHRINE DETAIL ====================
+    View* shrine_detail_view = view_alloc();
+    view_set_draw_callback(shrine_detail_view, shrine_detail_draw_callback);
+    view_set_input_callback(shrine_detail_view, shrine_detail_input_callback);
+    view_dispatcher_add_view(view_dispatcher, VIEW_SHRINE_DETAIL, shrine_detail_view);
+
+    // ==================== VIEW 6: CAMPFIRE ====================
+    View* campfire_view = view_alloc();
+    view_set_draw_callback(campfire_view, campfire_draw_callback);
+    view_set_input_callback(campfire_view, campfire_input_callback);
+    view_dispatcher_add_view(view_dispatcher, VIEW_CAMPFIRE, campfire_view);
+
+    // ==================== VIEW 7: CAMPFIRE PROFILE ====================
+    View* campfire_profile_view = view_alloc();
+    view_set_draw_callback(campfire_profile_view, campfire_profile_draw_callback);
+    view_set_input_callback(campfire_profile_view, campfire_profile_input_callback);
+    view_dispatcher_add_view(view_dispatcher, VIEW_CAMPFIRE_PROFILE, campfire_profile_view);
+
+    // ==================== VIEW 5: TECHNIQUES ====================
+    View* technique_view = view_alloc();
+    view_set_draw_callback(technique_view, technique_view_draw_callback);
+    view_set_input_callback(technique_view, technique_view_input_callback);
+    view_dispatcher_add_view(view_dispatcher, VIEW_TECHNIQUE, technique_view);
+
+    // Start at main menu
+    view_dispatcher_switch_to_view(view_dispatcher, VIEW_MENU);
 
     // Run event loop
     view_dispatcher_run(view_dispatcher);
 
-    // Cleanup
-    view_dispatcher_remove_view(view_dispatcher, 0);
-    view_dispatcher_remove_view(view_dispatcher, 1);
+    // ==================== CLEANUP ====================
+    view_dispatcher_remove_view(view_dispatcher, VIEW_MENU);
+    view_dispatcher_remove_view(view_dispatcher, VIEW_CODEX);
+    view_dispatcher_remove_view(view_dispatcher, VIEW_SIGNAL);
+    view_dispatcher_remove_view(view_dispatcher, VIEW_SHRINE_LIST);
+    view_dispatcher_remove_view(view_dispatcher, VIEW_SHRINE_DETAIL);
+    view_dispatcher_remove_view(view_dispatcher, VIEW_CAMPFIRE);
+    view_dispatcher_remove_view(view_dispatcher, VIEW_CAMPFIRE_PROFILE);
+    view_dispatcher_remove_view(view_dispatcher, VIEW_TECHNIQUE);
+    
     view_free(codex_view);
+    view_free(signal_view);
+    view_free(shrine_view);
+    view_free(shrine_detail_view);
+    view_free(campfire_view);
+    view_free(campfire_profile_view);
+    view_free(technique_view);
     menu_free(menu);
     view_dispatcher_free(view_dispatcher);
     furi_record_close(RECORD_GUI);
 
-    // Save progress (stubbed to RAM cache)
+    // Save progress
     save_codex(&player_codex, save_path);
 
     return 0;

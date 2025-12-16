@@ -28,6 +28,22 @@ void init_codex(Codex* codex, const char* player_name) {
     memset(codex->shrine_progress, 0, sizeof(codex->shrine_progress));
     memset(codex->techniques, 0, sizeof(codex->techniques));
 
+    // Add some test encounters for gameplay demo
+    strncpy(codex->encounter_log[0].signalborn_id, "SIG0A7F", sizeof(codex->encounter_log[0].signalborn_id));
+    strncpy(codex->encounter_log[0].aura, "Flamebound", sizeof(codex->encounter_log[0].aura));
+    codex->encounter_log[0].timestamp = furi_get_tick();
+    codex->encounter_log[0].echo_transferred = false;
+
+    strncpy(codex->encounter_log[1].signalborn_id, "SIG9E2C", sizeof(codex->encounter_log[1].signalborn_id));
+    strncpy(codex->encounter_log[1].aura, "Whispered", sizeof(codex->encounter_log[1].aura));
+    codex->encounter_log[1].timestamp = furi_get_tick() - 3600000;  // 1 hour ago
+    codex->encounter_log[1].echo_transferred = true;
+
+    strncpy(codex->encounter_log[2].signalborn_id, "SIG4C1B", sizeof(codex->encounter_log[2].signalborn_id));
+    strncpy(codex->encounter_log[2].aura, "Stormtouched", sizeof(codex->encounter_log[2].aura));
+    codex->encounter_log[2].timestamp = furi_get_tick() - 7200000;  // 2 hours ago
+    codex->encounter_log[2].echo_transferred = false;
+
     // Timestamp the save
     codex->save_timestamp = furi_get_tick();
 }
