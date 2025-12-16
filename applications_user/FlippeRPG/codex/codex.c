@@ -20,6 +20,11 @@ void init_codex(Codex* codex, const char* player_name) {
     // Reset XP counters
     codex->xp_total = 0;
     codex->duel_xp = 0;
+    codex->duels_won = 0;
+    codex->duels_lost = 0;
+    
+    // Default appearance (can be changed in settings later)
+    codex->appearance = APPEARANCE_MAGE_MALE;
 
     // Clear all Codex subsystems
     memset(codex->echo_log, 0, sizeof(codex->echo_log));
@@ -71,7 +76,6 @@ void log_signal(Codex* codex, const char* signal_hash, int xp) {
 }
 
 // Adds XP from duels (separate from signal XP)
-// Adds XP from duels (separate from signal XP)
 void update_duel_xp(Codex* codex, int xp) {
     // Add duel XP
     codex->duel_xp += xp;
@@ -80,6 +84,18 @@ void update_duel_xp(Codex* codex, int xp) {
     if (ready_for_convergence(codex)) {
         process_echo(codex, false, false); // lineage trigger
     }
+}
+
+// Records duel result (win/loss) and awards XP
+void record_duel_result(Codex* codex, bool won, int xp) {
+    if(won) {
+        codex->duels_won++;
+    } else {
+        codex->duels_lost++;
+    }
+    
+    // Add duel XP
+    update_duel_xp(codex, xp);
 }
 
 // Logs a multiplayer encounter with another Flipper

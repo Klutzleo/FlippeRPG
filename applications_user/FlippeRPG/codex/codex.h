@@ -61,6 +61,10 @@ typedef struct {
 
     int xp_total;           // Total XP from signals/shrines
     int duel_xp;            // XP from duels
+    int duels_won;          // Number of duels won
+    int duels_lost;         // Number of duels lost
+    
+    AppearanceType appearance;  // Player sprite choice (male/female/variant)
 
     EchoEntry       echo_log[MAX_ECHO_LOG];          // Memory Echoes collected
     SignalEntry     signal_history[MAX_SIGNALS];    // Rolling signal log
@@ -87,6 +91,7 @@ void log_signal(Codex* codex, const char* signal_hash, int xp);
 
 // Duel XP
 void update_duel_xp(Codex* codex, int xp);
+void record_duel_result(Codex* codex, bool won, int xp);
 
 // Encounters
 void log_encounter(Codex* codex, const char* signalborn_id,

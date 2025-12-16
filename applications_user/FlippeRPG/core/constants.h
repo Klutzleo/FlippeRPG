@@ -46,4 +46,13 @@ typedef enum {
     // add more states as needed
 } EchoState;
 
+// Player appearance/sprite variants
+typedef enum {
+    APPEARANCE_MAGE_MALE,
+    APPEARANCE_MAGE_FEMALE,
+    APPEARANCE_WIZARD_MALE,
+    APPEARANCE_WIZARD_FEMALE,
+    NUM_APPEARANCES
+} AppearanceType;
+
 #endif

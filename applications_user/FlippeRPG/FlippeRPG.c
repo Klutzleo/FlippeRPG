@@ -140,18 +140,20 @@ static void codex_view_draw_callback(Canvas* canvas, void* model) {
     canvas_draw_str(canvas, 2, 12, "Codex Status");
     
     canvas_set_font(canvas, FontSecondary);
-    char line1[64], line2[64], line3[64], line4[64], line5[64];
+    char line1[64], line2[64], line3[64], line4[64], line5[64], line6[64];
     snprintf(line1, sizeof(line1), "Name: %s", player_codex.player_name);
     snprintf(line2, sizeof(line2), "ID: %s", player_codex.codex_id);
     snprintf(line3, sizeof(line3), "Signal XP: %d", player_codex.xp_total);
     snprintf(line4, sizeof(line4), "Duel XP: %d", player_codex.duel_xp);
-    snprintf(line5, sizeof(line5), "Aura: %s", player_codex.aura_trait[0] ? player_codex.aura_trait : "Unbound");
+    snprintf(line5, sizeof(line5), "Duels: %dW / %dL", player_codex.duels_won, player_codex.duels_lost);
+    snprintf(line6, sizeof(line6), "Aura: %s", player_codex.aura_trait[0] ? player_codex.aura_trait : "Unbound");
     
-    canvas_draw_str(canvas, 2, 28, line1);
-    canvas_draw_str(canvas, 2, 40, line2);
-    canvas_draw_str(canvas, 2, 52, line3);
-    canvas_draw_str(canvas, 2, 62, line4);
-    canvas_draw_str(canvas, 2, 64 + 12, line5);
+    canvas_draw_str(canvas, 2, 24, line1);
+    canvas_draw_str(canvas, 2, 34, line2);
+    canvas_draw_str(canvas, 2, 44, line3);
+    canvas_draw_str(canvas, 2, 54, line4);
+    canvas_draw_str(canvas, 2, 64, line5);
+    canvas_draw_str(canvas, 66, 24, line6);
 }
 
 // ==================== SIGNAL ABSORPTION VIEW ====================
@@ -415,8 +417,9 @@ static bool campfire_profile_input_callback(InputEvent* event, void* context) {
     if(event->type == InputTypeShort) {
         if(event->key == InputKeyLeft) {
             // Duel selected
-            int xp = (rand() % 100) < 60 ? 15 : 5;  // 60% win = 15 XP, lose = 5 XP
-            update_duel_xp(&player_codex, xp);
+            bool won = (rand() % 100) < 60;  // 60% win rate
+            int xp = won ? 15 : 5;  // Win = 15 XP, lose = 5 XP
+            record_duel_result(&player_codex, won, xp);
             last_duel_xp = xp;
             // Return to campfire
             view_dispatcher_switch_to_view(view_dispatcher, VIEW_CAMPFIRE);
