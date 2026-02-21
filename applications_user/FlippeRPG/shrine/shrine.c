@@ -40,10 +40,21 @@ void attempt_shrine(Codex* codex, ShrineID shrine_id, bool ritual_success) {
     }
 }
 
-// Basic trigger wrapper for now; hooks in signal flow
+// Maps each shrine to the signal type required to activate it
+static const SignalType shrine_requirements[NUM_SHRINES] = {
+    [SHRINE_CAVE_THAT_LISTENS] = SIGNAL_SUBGHZ,
+    [SHRINE_FLAME_REACH]       = SIGNAL_IR,
+    [SHRINE_BIND_WHISPER]      = SIGNAL_NFC,
+    [SHRINE_THREAD_TOUCH]      = SIGNAL_GPIO,
+    [SHRINE_ECHO_TOUCHED]      = SIGNAL_FUSION,
+    [SHRINE_UNKNOWN]           = SIGNAL_UNKNOWN,
+};
+
+// Triggers a shrine ritual — only succeeds if the signal type matches the shrine's requirement
 void trigger_shrine(Codex* codex, ShrineID shrine_id, SignalType signal_type) {
-    (void)signal_type;
-    attempt_shrine(codex, shrine_id, true);
+    if(shrine_id >= NUM_SHRINES) return;
+    bool correct_signal = (signal_type == shrine_requirements[shrine_id]);
+    attempt_shrine(codex, shrine_id, correct_signal);
 }
 
 bool is_ritual_complete(Codex* codex, ShrineID shrine_id) {

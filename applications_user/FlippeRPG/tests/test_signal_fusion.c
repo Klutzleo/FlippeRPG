@@ -14,8 +14,8 @@ int main() {
     const char* echo2 = "ECHO-BETA";
 
     // Log both echoes
-    log_signal(&test_codex, echo1, SIGNAL_IR);
-    log_signal(&test_codex, echo2, SIGNAL_NFC);
+    log_signal(&test_codex, echo1, 5, SIGNAL_IR);
+    log_signal(&test_codex, echo2, 5, SIGNAL_NFC);
 
     // Fuse them
     fuse_echoes(&test_codex, echo1, echo2);

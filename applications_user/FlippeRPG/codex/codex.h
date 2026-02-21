@@ -13,9 +13,10 @@
 
 // Stores a scanned signal's hash and XP info
 typedef struct {
-    char   hash[32];       // Unique signal hash
-    int    xp_awarded;     // XP granted for this signal
-    time_t timestamp;      // When it was scanned
+    char       hash[32];        // Unique signal hash
+    int        xp_awarded;      // XP granted for this signal
+    time_t     timestamp;       // When it was scanned
+    SignalType signal_type;     // Which hardware source produced this signal
 } SignalEntry;
 
 // Stores a multiplayer encounter with another Flipper
@@ -87,7 +88,7 @@ void codex_init(Codex* codex);
 void init_codex(Codex* codex, const char* player_name);
 
 // Signal logging
-void log_signal(Codex* codex, const char* signal_hash, int xp);
+void log_signal(Codex* codex, const char* signal_hash, int xp, SignalType signal_type);
 
 // Duel XP
 void update_duel_xp(Codex* codex, int xp);

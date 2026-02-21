@@ -39,11 +39,11 @@ int calculate_signal_xp(Codex* codex, const char* hash) {
 
 // Starts the signal listening loop (stubbed for now)
 void start_signal_loop(Codex* codex) {
-    // Simulate scanning a signal
+    // Simulate scanning a SubGHz signal
     const char* dummy_signal = "433.92MHz:DEADBEEF";
     char* hash = hash_signal(dummy_signal);
     int xp = calculate_signal_xp(codex, hash);
-    log_signal(codex, hash, xp);
+    log_signal(codex, hash, xp, SIGNAL_SUBGHZ);
 
     printf("Scanned signal: %s → XP: %d\n", hash, xp);
 
@@ -64,9 +64,11 @@ void on_nfc_scan(Codex* codex, const char* tag_id) {
 }
 
 SignalType get_signal_type(Codex* codex, const char* signal_hash) {
-    // Current Codex tracks `signal_history` without type metadata; return unknown for now
-    (void)codex;
-    (void)signal_hash;
+    for(int i = 0; i < MAX_SIGNALS; i++) {
+        if(strcmp(codex->signal_history[i].hash, signal_hash) == 0) {
+            return codex->signal_history[i].signal_type;
+        }
+    }
     return SIGNAL_UNKNOWN;
 }
 
@@ -78,7 +80,7 @@ int enter_manual_signal(Codex* codex, const char* signal_hash) {
     if (xp == 5) xp = 2;
     else if (xp == 1) xp = 0;
 
-    log_signal(codex, signal_hash, xp);
+    log_signal(codex, signal_hash, xp, SIGNAL_UNKNOWN);
     printf("[Manual] Entered signal: %s → XP: %d\n", signal_hash, xp);
     return xp;
 }

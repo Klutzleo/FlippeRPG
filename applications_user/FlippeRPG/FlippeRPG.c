@@ -3,6 +3,7 @@
 #include <gui/view.h>
 #include <gui/view_dispatcher.h>
 #include <gui/modules/menu.h>
+#include <gui/modules/text_input.h>
 #include <notification/notification_messages.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -30,6 +31,7 @@ enum {
     VIEW_TECHNIQUE = 5,
     VIEW_CAMPFIRE = 6,
     VIEW_CAMPFIRE_PROFILE = 7,
+    VIEW_NAME_ENTRY = 8,
 };
 
 // Campfire player slot positions (N, S, E, W)
@@ -64,6 +66,10 @@ static uint32_t last_scan_tick = 0;  // Last time we scanned for players
 
 // Campfire visuals
 static IconAnimation* campfire_fire_anim = NULL;
+
+// Name entry
+static TextInput* name_input = NULL;
+static char name_buffer[16] = {0};
 
 // Shrine name and description lookup
 static const char* get_shrine_name(ShrineID id) {
@@ -154,12 +160,12 @@ static void codex_view_draw_callback(Canvas* canvas, void* model) {
     snprintf(line5, sizeof(line5), "Duels: %dW / %dL", player_codex.duels_won, player_codex.duels_lost);
     snprintf(line6, sizeof(line6), "Aura: %s", player_codex.aura_trait[0] ? player_codex.aura_trait : "Unbound");
     
-    canvas_draw_str(canvas, 2, 24, line1);
-    canvas_draw_str(canvas, 2, 34, line2);
-    canvas_draw_str(canvas, 2, 44, line3);
-    canvas_draw_str(canvas, 2, 54, line4);
-    canvas_draw_str(canvas, 2, 64, line5);
-    canvas_draw_str(canvas, 66, 24, line6);
+    canvas_draw_str(canvas, 2, 22, line1);
+    canvas_draw_str(canvas, 2, 30, line2);
+    canvas_draw_str(canvas, 2, 38, line3);
+    canvas_draw_str(canvas, 2, 46, line4);
+    canvas_draw_str(canvas, 2, 54, line5);
+    canvas_draw_str(canvas, 2, 62, line6);
 }
 
 // ==================== SIGNAL ABSORPTION VIEW ====================
@@ -176,7 +182,7 @@ static void signal_view_draw_callback(Canvas* canvas, void* model) {
     snprintf(xp_line, sizeof(xp_line), "Last Gain: +%lu XP", last_signal_xp);
     canvas_draw_str(canvas, 2, 52, xp_line);
     
-    canvas_draw_str(canvas, 2, 64, "Press OK to scan");
+    canvas_draw_str(canvas, 2, 63, "Press OK to scan");
 }
 
 static bool signal_view_input_callback(InputEvent* event, void* context) {
@@ -206,24 +212,24 @@ static void shrine_view_draw_callback(Canvas* canvas, void* model) {
     canvas_set_font(canvas, FontSecondary);
     
     // Display all shrines with their status
-    for(int i = 0; i < NUM_SHRINES; i++) {
+    for(int i = 0; i < SHRINE_UNKNOWN; i++) {
         ShrineProgress* shrine = &player_codex.shrine_progress[i];
         const char* shrine_name = get_shrine_name(i);
         const char* status = shrine->completed ? "[X]" : "[ ]";
-        
+
         char shrine_line[64];
         snprintf(shrine_line, sizeof(shrine_line), "%s %s", status, shrine_name);
-        
+
         // Highlight selected shrine
         if(i == selected_shrine) {
-            canvas_draw_str(canvas, 0, 24 + (i * 10), ">");
-            canvas_draw_str(canvas, 8, 24 + (i * 10), shrine_line);
+            canvas_draw_str(canvas, 0, 24 + (i * 8), ">");
+            canvas_draw_str(canvas, 8, 24 + (i * 8), shrine_line);
         } else {
-            canvas_draw_str(canvas, 2, 24 + (i * 10), shrine_line);
+            canvas_draw_str(canvas, 2, 24 + (i * 8), shrine_line);
         }
     }
-    
-    canvas_draw_str(canvas, 2, 64, "OK: View | Back: Menu");
+
+    canvas_draw_str(canvas, 2, 63, "OK: View | Back: Menu");
 }
 
 static bool shrine_view_input_callback(InputEvent* event, void* context) {
@@ -476,7 +482,7 @@ static void technique_view_draw_callback(Canvas* canvas, void* model) {
         canvas_draw_str(canvas, 2, 40, "Complete shrines to gain power");
     }
     
-    canvas_draw_str(canvas, 2, 64, "Back: Return to Menu");
+    canvas_draw_str(canvas, 2, 63, "Back: Return to Menu");
 }
 
 static bool technique_view_input_callback(InputEvent* event, void* context) {
@@ -498,16 +504,20 @@ static bool generic_back_callback(InputEvent* event, void* context) {
     return false;
 }
 
+// Called when player confirms their name in the text input screen
+static void name_input_callback(void* context) {
+    (void)context;
+    init_codex(&player_codex, name_buffer);
+    save_codex(&player_codex, NULL);
+    view_dispatcher_switch_to_view(view_dispatcher, VIEW_MENU);
+}
+
 int32_t flippe_rpg_app(void* p) {
     (void)p;
     srand((unsigned)furi_get_tick());
 
-    // Load or initialize Codex (already static, so no stack pressure)
-    const char* save_path = "codex.sav";
-    load_codex(&player_codex, save_path);
-    if(strlen(player_codex.codex_id) == 0) {
-        init_codex(&player_codex, "Jason");
-    }
+    // Load Codex — if no save exists, show name entry screen instead of using a default
+    bool is_new_player = !load_codex(&player_codex, NULL);
 
     // Quick visible cue: blink green LED once
     NotificationApp* notification = furi_record_open(RECORD_NOTIFICATION);
@@ -582,8 +592,26 @@ int32_t flippe_rpg_app(void* p) {
     view_set_input_callback(technique_view, technique_view_input_callback);
     view_dispatcher_add_view(view_dispatcher, VIEW_TECHNIQUE, technique_view);
 
-    // Start at main menu
-    view_dispatcher_switch_to_view(view_dispatcher, VIEW_MENU);
+    // ==================== VIEW 8: NAME ENTRY ====================
+    name_input = text_input_alloc();
+    text_input_set_header_text(name_input, "What is your name?");
+    memset(name_buffer, 0, sizeof(name_buffer));
+    text_input_set_result_callback(
+        name_input,
+        name_input_callback,
+        NULL,
+        name_buffer,
+        sizeof(name_buffer),
+        false);
+    text_input_set_minimum_length(name_input, 1);
+    view_dispatcher_add_view(view_dispatcher, VIEW_NAME_ENTRY, text_input_get_view(name_input));
+
+    // New players see name entry first; returning players go straight to menu
+    if(is_new_player) {
+        view_dispatcher_switch_to_view(view_dispatcher, VIEW_NAME_ENTRY);
+    } else {
+        view_dispatcher_switch_to_view(view_dispatcher, VIEW_MENU);
+    }
 
     // Run event loop
     view_dispatcher_run(view_dispatcher);
@@ -597,6 +625,7 @@ int32_t flippe_rpg_app(void* p) {
     view_dispatcher_remove_view(view_dispatcher, VIEW_CAMPFIRE);
     view_dispatcher_remove_view(view_dispatcher, VIEW_CAMPFIRE_PROFILE);
     view_dispatcher_remove_view(view_dispatcher, VIEW_TECHNIQUE);
+    view_dispatcher_remove_view(view_dispatcher, VIEW_NAME_ENTRY);
     
     view_free(codex_view);
     view_free(signal_view);
@@ -610,12 +639,14 @@ int32_t flippe_rpg_app(void* p) {
     }
     view_free(campfire_profile_view);
     view_free(technique_view);
+    text_input_free(name_input);
+    name_input = NULL;
     menu_free(menu);
     view_dispatcher_free(view_dispatcher);
     furi_record_close(RECORD_GUI);
 
     // Save progress
-    save_codex(&player_codex, save_path);
+    save_codex(&player_codex, NULL);
 
     return 0;
 }
