@@ -20,6 +20,7 @@
 // Assets: icon animations compiled from root assets/icons
 #include <assets_icons.h>
 #include <gui/icon_animation.h>
+#include <notification/notification_messages.h>
 
 // View IDs
 enum {
@@ -28,12 +29,22 @@ enum {
     VIEW_SIGNAL = 2,
     VIEW_SHRINE_LIST = 3,
     VIEW_SHRINE_DETAIL = 4,
-    VIEW_TECHNIQUE = 5,
-    VIEW_CAMPFIRE = 6,
-    VIEW_CAMPFIRE_PROFILE = 7,
-    VIEW_NAME_ENTRY = 8,
-    VIEW_DUEL = 9,
+    VIEW_CAMPFIRE = 5,
+    VIEW_CAMPFIRE_PROFILE = 6,
+    VIEW_NAME_ENTRY = 7,
+    VIEW_DUEL = 8,
+    VIEW_SUBSTRATE = 9,
 };
+
+// Fixed menu callback IDs — stable regardless of which items are currently visible.
+// Pre-substrate: only SIGNALS, STATUS, EXIT are shown.
+// Post-substrate: all items appear. Items are hidden (not just locked) until substrate.
+#define MENU_ID_SIGNALS   0
+#define MENU_ID_SUBSTRATE 1
+#define MENU_ID_SHRINES   2
+#define MENU_ID_CAMPFIRE  3
+#define MENU_ID_STATUS    4
+#define MENU_ID_EXIT      5
 
 // Campfire player slot positions (N, S, E, W)
 typedef enum {
@@ -56,9 +67,43 @@ typedef struct {
 // Static Codex to avoid stack overflow (struct is ~5KB)
 static Codex player_codex = {0};
 static ViewDispatcher* view_dispatcher = NULL;
+static Menu* main_menu = NULL;          // Rebuilt dynamically when substrate unlocks
 static bool last_scan_absorbed = false; // Flip true after a scan, drives signal view feedback
-static int selected_shrine = 0;      // Currently selected shrine for detail view
-static DuelState current_duel;       // Active duel state
+static int selected_shrine = 0;        // Currently selected shrine for detail view
+static int active_scan_band_index = 0; // Which unlocked band the signal view has selected
+static DuelState current_duel;         // Active duel state
+
+// CQ in Morse code: ─·─· (C) then ─ ─·─ (Q)
+// "Calling all stations." The only vibration in the game. Fires once, when The Substrate opens.
+// Unit = 100ms. Dot=1u on. Dash=3u on. Intra-element gap=1u off. Inter-letter gap=3u off.
+static const NotificationSequence substrate_morse_cq = {
+    // C: ─ · ─ ·
+    &message_vibro_on,
+    &message_delay_100, &message_delay_100, &message_delay_100,  // dash
+    &message_vibro_off, &message_delay_100,
+    &message_vibro_on,  &message_delay_100,                       // dot
+    &message_vibro_off, &message_delay_100,
+    &message_vibro_on,
+    &message_delay_100, &message_delay_100, &message_delay_100,  // dash
+    &message_vibro_off, &message_delay_100,
+    &message_vibro_on,  &message_delay_100,                       // dot
+    &message_vibro_off,
+    // Inter-letter gap: 3 units
+    &message_delay_100, &message_delay_100, &message_delay_100,
+    // Q: ─ ─ · ─
+    &message_vibro_on,
+    &message_delay_100, &message_delay_100, &message_delay_100,  // dash
+    &message_vibro_off, &message_delay_100,
+    &message_vibro_on,
+    &message_delay_100, &message_delay_100, &message_delay_100,  // dash
+    &message_vibro_off, &message_delay_100,
+    &message_vibro_on,  &message_delay_100,                       // dot
+    &message_vibro_off, &message_delay_100,
+    &message_vibro_on,
+    &message_delay_100, &message_delay_100, &message_delay_100,  // dash
+    &message_vibro_off,
+    NULL,
+};
 
 // Campfire state
 static CampfirePlayer campfire_slots[MAX_CAMP_SLOTS] = {0};
@@ -110,24 +155,23 @@ static const char* get_aura_name(ShrineID id) {
 static void main_menu_callback(void* context, uint32_t index) {
     (void)context;
     switch(index) {
-        case 0: // Absorb Signals
+        case MENU_ID_SIGNALS:
+            active_scan_band_index = 0;
+            last_scan_absorbed = false;
             view_dispatcher_switch_to_view(view_dispatcher, VIEW_SIGNAL);
             break;
-        case 1: // Shrines
-            selected_shrine = 0;  // Reset to first shrine
+        case MENU_ID_SUBSTRATE:
+            view_dispatcher_switch_to_view(view_dispatcher, VIEW_SUBSTRATE);
+            break;
+        case MENU_ID_SHRINES:
+            selected_shrine = 0;
             view_dispatcher_switch_to_view(view_dispatcher, VIEW_SHRINE_LIST);
             break;
-        case 2: // Techniques
-            view_dispatcher_switch_to_view(view_dispatcher, VIEW_TECHNIQUE);
-            break;
-        case 3: // Multiplayer (Campfire) — locked until Zero Day + faction confirmed
-            if(!player_codex.zero_day_confirmed || player_codex.faction[0] == '\0') {
-                // Not yet Rooted — campfire stays dark
-                break;
-            }
+        case MENU_ID_CAMPFIRE:
+            // Campfire requires Zero Day and faction — gated post-substrate
+            if(!player_codex.zero_day_confirmed || player_codex.faction[0] == '\0') break;
             selected_camp_slot = CAMP_NORTH;
             last_scan_tick = furi_get_tick();
-            // Populate campfire from encounter log
             memset(campfire_slots, 0, sizeof(campfire_slots));
             for(int i = 0; i < MAX_ENCOUNTERS && i < MAX_CAMP_SLOTS; i++) {
                 if(player_codex.encounter_log[i].signalborn_id[0] != 0) {
@@ -135,18 +179,38 @@ static void main_menu_callback(void* context, uint32_t index) {
                     strncpy(campfire_slots[i].aura, player_codex.encounter_log[i].aura, sizeof(campfire_slots[i].aura));
                     campfire_slots[i].last_seen_tick = furi_get_tick();
                     campfire_slots[i].active = true;
-                    campfire_slots[i].handshake_xp = 2;  // Auto-handshake XP
+                    campfire_slots[i].handshake_xp = 2;
                 }
             }
             view_dispatcher_switch_to_view(view_dispatcher, VIEW_CAMPFIRE);
             break;
-        case 4: // Status/Codex
+        case MENU_ID_STATUS:
             view_dispatcher_switch_to_view(view_dispatcher, VIEW_CODEX);
             break;
-        case 5: // Exit
+        case MENU_ID_EXIT:
             view_dispatcher_stop(view_dispatcher);
             break;
     }
+}
+
+// Builds (or rebuilds) the main menu based on current substrate state.
+// Pre-substrate: only Receive, Status, Exit.
+// Post-substrate: The Substrate, Shrines, Campfire also appear.
+static void build_menu(void) {
+    if(main_menu) {
+        view_dispatcher_remove_view(view_dispatcher, VIEW_MENU);
+        menu_free(main_menu);
+    }
+    main_menu = menu_alloc();
+    menu_add_item(main_menu, "Receive", NULL, MENU_ID_SIGNALS, main_menu_callback, NULL);
+    if(player_codex.substrate_unlocked) {
+        menu_add_item(main_menu, "The Substrate",  NULL, MENU_ID_SUBSTRATE, main_menu_callback, NULL);
+        menu_add_item(main_menu, "Shrines",        NULL, MENU_ID_SHRINES,   main_menu_callback, NULL);
+        menu_add_item(main_menu, "Campfire",       NULL, MENU_ID_CAMPFIRE,  main_menu_callback, NULL);
+    }
+    menu_add_item(main_menu, "Status", NULL, MENU_ID_STATUS, main_menu_callback, NULL);
+    menu_add_item(main_menu, "Exit",   NULL, MENU_ID_EXIT,   main_menu_callback, NULL);
+    view_dispatcher_add_view(view_dispatcher, VIEW_MENU, menu_get_view(main_menu));
 }
 
 // ==================== CODEX STATUS VIEW ====================
@@ -180,39 +244,91 @@ static void codex_view_draw_callback(Canvas* canvas, void* model) {
     canvas_draw_str(canvas, 2, 62, line6);
 }
 
-// ==================== SIGNAL ABSORPTION VIEW ====================
+// ==================== RECEIVE VIEW ====================
+
+static const char* get_band_name(SignalType type) {
+    switch(type) {
+        case SIGNAL_RF:        return "RF";
+        case SIGNAL_IR:        return "IR";
+        case SIGNAL_SUBGHZ:    return "Sub-GHz";
+        case SIGNAL_NFC:       return "NFC";
+        case SIGNAL_BLUETOOTH: return "Bluetooth";
+        default:               return "---";
+    }
+}
+
+// Fires CQ in Morse, rebuilds the menu with all items visible, and saves.
+// Called exactly once — the moment check_band_gate returns true.
+static void trigger_substrate_unlock(void) {
+    NotificationApp* notifications = furi_record_open(RECORD_NOTIFICATION);
+    notification_message(notifications, &substrate_morse_cq);
+    furi_record_close(RECORD_NOTIFICATION);
+    build_menu(); // The Substrate is now in the menu — no announcement, just there
+    save_codex(&player_codex, NULL);
+}
+
 static void signal_view_draw_callback(Canvas* canvas, void* model) {
     (void)model;
     canvas_clear(canvas);
     canvas_set_font(canvas, FontPrimary);
-    canvas_draw_str(canvas, 2, 12, "Signal Absorption");
-    
+    canvas_draw_str(canvas, 2, 10, "Receive");
+
     canvas_set_font(canvas, FontSecondary);
-    canvas_draw_str(canvas, 2, 28, "Scanning for signals...");
-    
-    if(last_scan_absorbed) {
-        char sig_line[32];
-        snprintf(sig_line, sizeof(sig_line), "Signal: %s",
-            signal_strength_labels[player_codex.signal_strength_level]);
-        canvas_draw_str(canvas, 2, 52, sig_line);
+
+    int bands = player_codex.bands_unlocked;
+    if(bands < 1) bands = 1;
+    if(active_scan_band_index >= bands) active_scan_band_index = bands - 1;
+
+    // Vertical band list — new bands appear at the bottom as they unlock
+    for(int i = 0; i < bands; i++) {
+        int y = 22 + (i * 9);
+        const char* name = get_band_name(band_order[i]);
+        if(i == active_scan_band_index) {
+            canvas_draw_str(canvas, 0, y, ">");
+            canvas_draw_str(canvas, 8, y, name);
+        } else {
+            canvas_draw_str(canvas, 8, y, name);
+        }
     }
-    
-    canvas_draw_str(canvas, 2, 63, "Press OK to scan");
+
+    // Footer: show last received signal strength, or navigation hint
+    if(last_scan_absorbed) {
+        char footer[32];
+        snprintf(footer, sizeof(footer), "Signal: %s",
+            signal_strength_labels[player_codex.signal_strength_level]);
+        canvas_draw_str(canvas, 2, 62, footer);
+    } else {
+        canvas_draw_str(canvas, 2, 62, "OK: receive  Back: menu");
+    }
 }
 
 static bool signal_view_input_callback(InputEvent* event, void* context) {
     (void)context;
-    if(event->type == InputTypeShort) {
-        if(event->key == InputKeyOk) {
-            // Trigger signal scan
-            start_signal_loop(&player_codex);
-            last_scan_absorbed = true;
-            return true;
+    if(event->type != InputTypeShort) return false;
+
+    int bands = player_codex.bands_unlocked;
+    if(bands < 1) bands = 1;
+
+    if(event->key == InputKeyUp) {
+        if(active_scan_band_index > 0) active_scan_band_index--;
+        return true;
+    }
+    if(event->key == InputKeyDown) {
+        if(active_scan_band_index < bands - 1) active_scan_band_index++;
+        return true;
+    }
+    if(event->key == InputKeyOk) {
+        SignalType scan_type = band_order[active_scan_band_index];
+        scan_band(&player_codex, scan_type);
+        last_scan_absorbed = true;
+        if(check_band_gate(&player_codex)) {
+            trigger_substrate_unlock();
         }
-        else if(event->key == InputKeyBack) {
-            view_dispatcher_switch_to_view(view_dispatcher, VIEW_MENU);
-            return true;
-        }
+        return true;
+    }
+    if(event->key == InputKeyBack) {
+        view_dispatcher_switch_to_view(view_dispatcher, VIEW_MENU);
+        return true;
     }
     return false;
 }
@@ -568,37 +684,28 @@ static bool duel_input_callback(InputEvent* event, void* context) {
     return false;
 }
 
-// ==================== TECHNIQUE VIEW ====================
-static void technique_view_draw_callback(Canvas* canvas, void* model) {
+// ==================== THE SUBSTRATE VIEW ====================
+static void substrate_view_draw_callback(Canvas* canvas, void* model) {
     (void)model;
     canvas_clear(canvas);
     canvas_set_font(canvas, FontPrimary);
-    canvas_draw_str(canvas, 2, 12, "Techniques");
-    
+    canvas_draw_str(canvas, 2, 10, "THE SUBSTRATE");
+
+    // QR code placeholder — actual encoding via PWA (codex ID + state)
+    canvas_draw_frame(canvas, 40, 14, 48, 40);
     canvas_set_font(canvas, FontSecondary);
-    
-    // Display unlocked techniques
-    int display_count = 0;
-    for(int i = 0; i < MAX_TECHNIQUES && display_count < 3; i++) {
-        TechniqueProgress* tech = &player_codex.techniques[i];
-        if(tech->name[0] != 0 && tech->unlocked) {
-            char tech_line[64];
-            const char* mastery = tech->mastered ? " [MASTERED]" : "";
-            snprintf(tech_line, sizeof(tech_line), "%s (x%d%s)", tech->name, tech->uses, mastery);
-            canvas_draw_str(canvas, 2, 28 + (display_count * 12), tech_line);
-            display_count++;
-        }
-    }
-    
-    if(display_count == 0) {
-        canvas_draw_str(canvas, 2, 28, "No techniques unlocked");
-        canvas_draw_str(canvas, 2, 40, "Complete shrines to gain power");
-    }
-    
-    canvas_draw_str(canvas, 2, 63, "Back: Return to Menu");
+    canvas_draw_str(canvas, 50, 32, "[ QR ]");
+    canvas_draw_str(canvas, 48, 42, "COMING");
+
+    // Codex ID shown beneath — scanned by PWA to identify this Signalborn
+    char id_line[24];
+    snprintf(id_line, sizeof(id_line), "ID: %s", player_codex.codex_id);
+    canvas_draw_str(canvas, 2, 54, id_line);
+
+    canvas_draw_str(canvas, 2, 62, "Back: Menu");
 }
 
-static bool technique_view_input_callback(InputEvent* event, void* context) {
+static bool substrate_view_input_callback(InputEvent* event, void* context) {
     (void)context;
     if(event->type == InputTypeShort && event->key == InputKeyBack) {
         view_dispatcher_switch_to_view(view_dispatcher, VIEW_MENU);
@@ -638,14 +745,8 @@ int32_t flippe_rpg_app(void* p) {
     view_dispatcher_attach_to_gui(view_dispatcher, gui, ViewDispatcherTypeFullscreen);
 
     // ==================== VIEW 0: MAIN MENU ====================
-    Menu* menu = menu_alloc();
-    menu_add_item(menu, "Absorb Signals", NULL, 0, main_menu_callback, NULL);
-    menu_add_item(menu, "Shrines", NULL, 1, main_menu_callback, NULL);
-    menu_add_item(menu, "Techniques", NULL, 2, main_menu_callback, NULL);
-    menu_add_item(menu, "Multiplayer", NULL, 3, main_menu_callback, NULL);
-    menu_add_item(menu, "Status", NULL, 4, main_menu_callback, NULL);
-    menu_add_item(menu, "Exit", NULL, 5, main_menu_callback, NULL);
-    view_dispatcher_add_view(view_dispatcher, VIEW_MENU, menu_get_view(menu));
+    // Built dynamically — shows only Receive/Status/Exit until substrate unlocks.
+    build_menu();
 
     // ==================== VIEW 1: CODEX STATUS ====================
     View* codex_view = view_alloc();
@@ -653,7 +754,7 @@ int32_t flippe_rpg_app(void* p) {
     view_set_input_callback(codex_view, generic_back_callback);
     view_dispatcher_add_view(view_dispatcher, VIEW_CODEX, codex_view);
 
-    // ==================== VIEW 2: SIGNAL ABSORPTION ====================
+    // ==================== VIEW 2: RECEIVE ====================
     View* signal_view = view_alloc();
     view_set_draw_callback(signal_view, signal_view_draw_callback);
     view_set_input_callback(signal_view, signal_view_input_callback);
@@ -693,19 +794,19 @@ int32_t flippe_rpg_app(void* p) {
     view_set_input_callback(campfire_profile_view, campfire_profile_input_callback);
     view_dispatcher_add_view(view_dispatcher, VIEW_CAMPFIRE_PROFILE, campfire_profile_view);
 
-    // ==================== VIEW 5: TECHNIQUES ====================
-    View* technique_view = view_alloc();
-    view_set_draw_callback(technique_view, technique_view_draw_callback);
-    view_set_input_callback(technique_view, technique_view_input_callback);
-    view_dispatcher_add_view(view_dispatcher, VIEW_TECHNIQUE, technique_view);
-
-    // ==================== VIEW 9: DUEL ====================
+    // ==================== VIEW 8: DUEL ====================
     View* duel_view = view_alloc();
     view_set_draw_callback(duel_view, duel_draw_callback);
     view_set_input_callback(duel_view, duel_input_callback);
     view_dispatcher_add_view(view_dispatcher, VIEW_DUEL, duel_view);
 
-    // ==================== VIEW 8: NAME ENTRY ====================
+    // ==================== VIEW 9: THE SUBSTRATE ====================
+    View* substrate_view = view_alloc();
+    view_set_draw_callback(substrate_view, substrate_view_draw_callback);
+    view_set_input_callback(substrate_view, substrate_view_input_callback);
+    view_dispatcher_add_view(view_dispatcher, VIEW_SUBSTRATE, substrate_view);
+
+    // ==================== VIEW 7: NAME ENTRY ====================
     name_input = text_input_alloc();
     text_input_set_header_text(name_input, "What is your name?");
     memset(name_buffer, 0, sizeof(name_buffer));
@@ -737,10 +838,10 @@ int32_t flippe_rpg_app(void* p) {
     view_dispatcher_remove_view(view_dispatcher, VIEW_SHRINE_DETAIL);
     view_dispatcher_remove_view(view_dispatcher, VIEW_CAMPFIRE);
     view_dispatcher_remove_view(view_dispatcher, VIEW_CAMPFIRE_PROFILE);
-    view_dispatcher_remove_view(view_dispatcher, VIEW_TECHNIQUE);
+    view_dispatcher_remove_view(view_dispatcher, VIEW_SUBSTRATE);
     view_dispatcher_remove_view(view_dispatcher, VIEW_NAME_ENTRY);
     view_dispatcher_remove_view(view_dispatcher, VIEW_DUEL);
-    
+
     view_free(codex_view);
     view_free(signal_view);
     view_free(shrine_view);
@@ -752,11 +853,12 @@ int32_t flippe_rpg_app(void* p) {
         campfire_fire_anim = NULL;
     }
     view_free(campfire_profile_view);
-    view_free(technique_view);
+    view_free(substrate_view);
     view_free(duel_view);
     text_input_free(name_input);
     name_input = NULL;
-    menu_free(menu);
+    menu_free(main_menu);
+    main_menu = NULL;
     view_dispatcher_free(view_dispatcher);
     furi_record_close(RECORD_GUI);
 

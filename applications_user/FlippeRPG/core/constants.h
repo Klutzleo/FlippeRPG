@@ -82,6 +82,18 @@ typedef enum {
     // add more states as needed
 } EchoState;
 
+// Band gate progression — sequential unlock: RF → IR → SubGHz → NFC → Bluetooth
+// 5 scans of a band unlocks the next. Bands are hidden until unlocked.
+// THE SUBSTRATE appears (with long vibration) after Bluetooth band completes.
+#define SCANS_PER_BAND 5
+static const SignalType band_order[5] = {
+    SIGNAL_RF,
+    SIGNAL_IR,
+    SIGNAL_SUBGHZ,
+    SIGNAL_NFC,
+    SIGNAL_BLUETOOTH,
+};
+
 // Player appearance/sprite variants
 typedef enum {
     APPEARANCE_MAGE_MALE,

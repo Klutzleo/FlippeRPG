@@ -74,6 +74,13 @@ typedef struct {
     ShrineProgress  shrine_progress[MAX_SHRINES];   // Shrine state
     TechniqueProgress techniques[MAX_TECHNIQUES];   // Techniques and mastery
 
+    // Band gate state
+    // Bands unlock sequentially: RF → IR → SubGHz → NFC → Bluetooth
+    // Hidden until unlocked. substrate_unlocked fires exactly once after all 5 bands complete.
+    int  band_scans[5];      // Cumulative scan count per signal type (indexed by SignalType, 0..4)
+    int  bands_unlocked;     // How many bands are currently visible (starts at 1, max 5)
+    bool substrate_unlocked; // True after all 5 bands reach SCANS_PER_BAND
+
     bool   storm_active;
     time_t storm_start_time;
     bool   converged;       // Whether the Codex has undergone convergence
@@ -123,3 +130,7 @@ void process_echo(Codex* codex, bool fusion_success, bool corruption_detected);
 void mark_echo_corrupted(Codex* codex, const char* echo_id);
 bool ready_for_convergence(Codex* codex);
 void assign_aura(Codex* codex, ShrineID shrine_id);
+
+// Band gate
+// Returns true the moment substrate_unlocked flips to true (fires exactly once per save).
+bool check_band_gate(Codex* codex);

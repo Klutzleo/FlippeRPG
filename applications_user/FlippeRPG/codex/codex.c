@@ -57,6 +57,11 @@ void init_codex(Codex* codex, const char* player_name) {
     memset(codex->shrine_progress, 0, sizeof(codex->shrine_progress));
     memset(codex->techniques, 0, sizeof(codex->techniques));
 
+    // Band gate — RF visible from the start, all others hidden until earned
+    memset(codex->band_scans, 0, sizeof(codex->band_scans));
+    codex->bands_unlocked   = 1;
+    codex->substrate_unlocked = false;
+
     // Timestamp the save
     codex->save_timestamp = furi_get_tick();
 }
@@ -76,6 +81,11 @@ void log_signal(Codex* codex, const char* signal_hash, int gain, SignalType sign
     codex->signal_history[0].gain = gain;
     codex->signal_history[0].timestamp = furi_get_tick();
     codex->signal_history[0].signal_type = signal_type;
+
+    // Count this scan toward the band gate (every scan counts, regardless of gain)
+    if((int)signal_type < 5) {
+        codex->band_scans[(int)signal_type]++;
+    }
 
     // Apply signal strength gain
     if(gain > 0) apply_signal_gain(codex, gain);
@@ -231,4 +241,36 @@ void process_echo(Codex* codex, bool fusion_success, bool corruption_detected) {
         // Placeholder: aura assignment happens via PWA, not here
         // strncpy(codex->aura_trait, "Signalborn", sizeof(codex->aura_trait));
     }
+}
+
+// -------------------- BAND GATE --------------------
+
+// Recalculates how many bands are unlocked and checks if The Substrate just opened.
+// Call after every scan. Returns true exactly once — when substrate_unlocked flips to true.
+bool check_band_gate(Codex* codex) {
+    // Sequential unlock: band i+1 opens only after band i reaches SCANS_PER_BAND.
+    // bands_unlocked starts at 1 (RF always visible). Walk forward until a band is incomplete.
+    int new_unlocked = 1;
+    for(int i = 0; i < 4; i++) {
+        if(codex->band_scans[(int)band_order[i]] >= SCANS_PER_BAND) {
+            new_unlocked = i + 2;
+        } else {
+            break; // Sequential — stop at first incomplete band
+        }
+    }
+    if(new_unlocked > 5) new_unlocked = 5;
+    codex->bands_unlocked = new_unlocked;
+
+    // Substrate unlocks when all five bands are complete
+    if(!codex->substrate_unlocked) {
+        if(codex->band_scans[(int)SIGNAL_RF]        >= SCANS_PER_BAND &&
+           codex->band_scans[(int)SIGNAL_IR]        >= SCANS_PER_BAND &&
+           codex->band_scans[(int)SIGNAL_SUBGHZ]    >= SCANS_PER_BAND &&
+           codex->band_scans[(int)SIGNAL_NFC]       >= SCANS_PER_BAND &&
+           codex->band_scans[(int)SIGNAL_BLUETOOTH] >= SCANS_PER_BAND) {
+            codex->substrate_unlocked = true;
+            return true; // Caller fires the long vibration
+        }
+    }
+    return false;
 }

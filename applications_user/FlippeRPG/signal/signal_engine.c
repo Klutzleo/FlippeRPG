@@ -77,6 +77,16 @@ SignalType get_signal_type(Codex* codex, const char* signal_hash) {
     return SIGNAL_UNKNOWN;
 }
 
+// Scans a specific band type — called by the band-select signal view.
+// Generates a simulated hash, calculates gain, and logs the signal.
+int scan_band(Codex* codex, SignalType band_type) {
+    char hash[16];
+    snprintf(hash, sizeof(hash), "SIG%04X", (unsigned)(rand() % 65536));
+    int gain = calculate_signal_gain(codex, band_type);
+    log_signal(codex, hash, gain, band_type);
+    return gain;
+}
+
 int enter_manual_signal(Codex* codex, const char* signal_hash) {
     // Manual entries: same type-per-day gate, but capped lower
     // Auto: 3/1/0 → Manual: 1/0/0
