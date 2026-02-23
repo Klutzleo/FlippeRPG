@@ -11,6 +11,7 @@
 #include <stdio.h>
 
 #include "codex/codex.h"
+#include "duel/duel.h"
 #include "signal/signal_engine.h"
 #include "techniques/techniques.h"
 #include "save/save_system.h"
@@ -32,6 +33,7 @@ enum {
     VIEW_CAMPFIRE = 6,
     VIEW_CAMPFIRE_PROFILE = 7,
     VIEW_NAME_ENTRY = 8,
+    VIEW_DUEL = 9,
 };
 
 // Campfire player slot positions (N, S, E, W)
@@ -55,9 +57,9 @@ typedef struct {
 // Static Codex to avoid stack overflow (struct is ~5KB)
 static Codex player_codex = {0};
 static ViewDispatcher* view_dispatcher = NULL;
-static uint32_t last_signal_xp = 0;  // Track last signal result for display
+static bool last_scan_absorbed = false; // Flip true after a scan, drives signal view feedback
 static int selected_shrine = 0;      // Currently selected shrine for detail view
-static int last_duel_xp = 0;         // Track duel result
+static DuelState current_duel;       // Active duel state
 
 // Campfire state
 static CampfirePlayer campfire_slots[MAX_CAMP_SLOTS] = {0};
@@ -159,9 +161,12 @@ static void codex_view_draw_callback(Canvas* canvas, void* model) {
     char line1[64], line2[64], line3[64], line4[64], line5[64], line6[64];
     snprintf(line1, sizeof(line1), "Name: %s", player_codex.player_name);
     snprintf(line2, sizeof(line2), "ID: %s", player_codex.codex_id);
-    snprintf(line3, sizeof(line3), "Signal XP: %d", player_codex.xp_total);
-    snprintf(line4, sizeof(line4), "Duel XP: %d", player_codex.duel_xp);
-    snprintf(line5, sizeof(line5), "Duels: %dW / %dL", player_codex.duels_won, player_codex.duels_lost);
+    snprintf(line3, sizeof(line3), "Signal: %s",
+        signal_strength_labels[player_codex.signal_strength_level]);
+    snprintf(line4, sizeof(line4), "Duels: %dW / %dL",
+        player_codex.duels_won, player_codex.duels_lost);
+    snprintf(line5, sizeof(line5), "Faction: %s",
+        player_codex.faction[0] ? player_codex.faction : "Unaligned");
     // Aura is revealed only after Zero Day — determined by scan behavior via PWA
     snprintf(line6, sizeof(line6), "Aura: %s",
         player_codex.zero_day_confirmed && player_codex.aura_trait[0]
@@ -186,9 +191,12 @@ static void signal_view_draw_callback(Canvas* canvas, void* model) {
     canvas_set_font(canvas, FontSecondary);
     canvas_draw_str(canvas, 2, 28, "Scanning for signals...");
     
-    char xp_line[64];
-    snprintf(xp_line, sizeof(xp_line), "Last Gain: +%lu XP", last_signal_xp);
-    canvas_draw_str(canvas, 2, 52, xp_line);
+    if(last_scan_absorbed) {
+        char sig_line[32];
+        snprintf(sig_line, sizeof(sig_line), "Signal: %s",
+            signal_strength_labels[player_codex.signal_strength_level]);
+        canvas_draw_str(canvas, 2, 52, sig_line);
+    }
     
     canvas_draw_str(canvas, 2, 63, "Press OK to scan");
 }
@@ -199,7 +207,7 @@ static bool signal_view_input_callback(InputEvent* event, void* context) {
         if(event->key == InputKeyOk) {
             // Trigger signal scan
             start_signal_loop(&player_codex);
-            last_signal_xp = 5;  // Simulate XP gain
+            last_scan_absorbed = true;
             return true;
         }
         else if(event->key == InputKeyBack) {
@@ -440,13 +448,9 @@ static bool campfire_profile_input_callback(InputEvent* event, void* context) {
     (void)context;
     if(event->type == InputTypeShort) {
         if(event->key == InputKeyLeft) {
-            // Duel selected
-            bool won = (rand() % 100) < 60;  // 60% win rate
-            int xp = won ? 15 : 5;  // Win = 15 XP, lose = 5 XP
-            record_duel_result(&player_codex, won, xp);
-            last_duel_xp = xp;
-            // Return to campfire
-            view_dispatcher_switch_to_view(view_dispatcher, VIEW_CAMPFIRE);
+            // Launch Signal Reading duel
+            duel_init(&current_duel, &player_codex);
+            view_dispatcher_switch_to_view(view_dispatcher, VIEW_DUEL);
             return true;
         }
         else if(event->key == InputKeyRight) {
@@ -460,6 +464,108 @@ static bool campfire_profile_input_callback(InputEvent* event, void* context) {
             return true;
         }
     }
+    return false;
+}
+
+// ==================== DUEL VIEW ====================
+static void duel_draw_callback(Canvas* canvas, void* model) {
+    (void)model;
+    canvas_clear(canvas);
+
+    if(current_duel.phase == DUEL_PHASE_RESULT) {
+        // Result screen
+        canvas_set_font(canvas, FontPrimary);
+        if(current_duel.result == DUEL_RESULT_WIN) {
+            canvas_draw_str(canvas, 2, 20, "CORRECT");
+            canvas_draw_str(canvas, 2, 36, "Signal identified.");
+            char sig_line[32];
+            snprintf(sig_line, sizeof(sig_line), "Signal: %s",
+                signal_strength_labels[player_codex.signal_strength_level]);
+            canvas_draw_str(canvas, 2, 50, sig_line);
+        } else {
+            canvas_draw_str(canvas, 2, 20, "MISREAD");
+            canvas_set_font(canvas, FontSecondary);
+            canvas_draw_str(canvas, 2, 36, "Signal lost. Presence drains.");
+            const char* presence;
+            if(player_codex.stamina >= 80)      presence = "Presence: strong";
+            else if(player_codex.stamina >= 60) presence = "Presence: steady";
+            else if(player_codex.stamina >= 40) presence = "Presence: waning";
+            else if(player_codex.stamina >= 20) presence = "Presence: thin";
+            else                                presence = "Presence: fading";
+            canvas_draw_str(canvas, 2, 50, presence);
+        }
+        canvas_set_font(canvas, FontSecondary);
+        canvas_draw_str(canvas, 2, 62, "Press any key");
+        return;
+    }
+
+    // Choosing screen
+    int secs = duel_seconds_remaining(&current_duel);
+
+    canvas_set_font(canvas, FontSecondary);
+    char header[32];
+    snprintf(header, sizeof(header), "SIGNAL READING  [%d]", secs);
+    canvas_draw_str(canvas, 2, 8, header);
+    canvas_draw_line(canvas, 0, 11, 127, 11);
+
+    for(int i = 0; i < DUEL_OPTIONS; i++) {
+        int y = 22 + i * 13;
+        bool selected = (i == current_duel.selected_index);
+        const char* name = duel_signal_name(current_duel.options[i]);
+        const char* desc = duel_descriptor(current_duel.options[i], current_duel.aura_edge[i]);
+
+        if(selected) {
+            canvas_draw_box(canvas, 0, y - 8, 128, 11);
+            canvas_set_color(canvas, ColorWhite);
+        }
+
+        char opt_line[48];
+        if(current_duel.aura_edge[i]) {
+            snprintf(opt_line, sizeof(opt_line), "> %-7s %s [!]", name, desc);
+        } else {
+            snprintf(opt_line, sizeof(opt_line), "  %-7s %s", name, desc);
+        }
+        canvas_draw_str(canvas, 2, y, opt_line);
+
+        if(selected) {
+            canvas_set_color(canvas, ColorBlack);
+        }
+    }
+
+    canvas_draw_str(canvas, 2, 62, "Up/Dn: select  OK: choose");
+}
+
+static bool duel_input_callback(InputEvent* event, void* context) {
+    (void)context;
+    if(event->type != InputTypeShort) return false;
+
+    // Auto-timeout check — runs before any key handling
+    if(current_duel.phase == DUEL_PHASE_CHOOSING && duel_seconds_remaining(&current_duel) == 0) {
+        duel_timeout(&current_duel, &player_codex);
+        return true;
+    }
+
+    if(current_duel.phase == DUEL_PHASE_CHOOSING) {
+        if(event->key == InputKeyUp) {
+            duel_move_selection(&current_duel, -1);
+            return true;
+        } else if(event->key == InputKeyDown) {
+            duel_move_selection(&current_duel, 1);
+            return true;
+        } else if(event->key == InputKeyOk || event->key == InputKeyRight) {
+            duel_resolve(&current_duel, &player_codex);
+            return true;
+        } else if(event->key == InputKeyBack) {
+            // Bail — counts as a loss (no free exits)
+            duel_timeout(&current_duel, &player_codex);
+            return true;
+        }
+    } else {
+        // DUEL_PHASE_RESULT — any key returns to campfire
+        view_dispatcher_switch_to_view(view_dispatcher, VIEW_CAMPFIRE);
+        return true;
+    }
+
     return false;
 }
 
@@ -600,6 +706,12 @@ int32_t flippe_rpg_app(void* p) {
     view_set_input_callback(technique_view, technique_view_input_callback);
     view_dispatcher_add_view(view_dispatcher, VIEW_TECHNIQUE, technique_view);
 
+    // ==================== VIEW 9: DUEL ====================
+    View* duel_view = view_alloc();
+    view_set_draw_callback(duel_view, duel_draw_callback);
+    view_set_input_callback(duel_view, duel_input_callback);
+    view_dispatcher_add_view(view_dispatcher, VIEW_DUEL, duel_view);
+
     // ==================== VIEW 8: NAME ENTRY ====================
     name_input = text_input_alloc();
     text_input_set_header_text(name_input, "What is your name?");
@@ -634,6 +746,7 @@ int32_t flippe_rpg_app(void* p) {
     view_dispatcher_remove_view(view_dispatcher, VIEW_CAMPFIRE_PROFILE);
     view_dispatcher_remove_view(view_dispatcher, VIEW_TECHNIQUE);
     view_dispatcher_remove_view(view_dispatcher, VIEW_NAME_ENTRY);
+    view_dispatcher_remove_view(view_dispatcher, VIEW_DUEL);
     
     view_free(codex_view);
     view_free(signal_view);
@@ -647,6 +760,7 @@ int32_t flippe_rpg_app(void* p) {
     }
     view_free(campfire_profile_view);
     view_free(technique_view);
+    view_free(duel_view);
     text_input_free(name_input);
     name_input = NULL;
     menu_free(menu);

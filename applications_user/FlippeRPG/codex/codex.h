@@ -11,10 +11,10 @@
 
 // -------------------- STRUCTS --------------------
 
-// Stores a scanned signal's hash and XP info
+// Stores a scanned signal's hash and gain info
 typedef struct {
     char       hash[32];        // Unique signal hash
-    int        xp_awarded;      // XP granted for this signal
+    int        gain;            // Signal score awarded for this scan
     time_t     timestamp;       // When it was scanned
     SignalType signal_type;     // Which hardware source produced this signal
 } SignalEntry;
@@ -60,10 +60,11 @@ typedef struct {
     char codex_id[16];      // Unique Codex ID (e.g. CDX1234)
     char aura_trait[16];    // e.g. "Flamebound", "Whispered", "Echo-Touched"
 
-    int xp_total;           // Total XP from signals/shrines
-    int duel_xp;            // XP from duels
-    int duels_won;          // Number of duels won
-    int duels_lost;         // Number of duels lost
+    int signal_score;            // Internal accumulation — never displayed to player
+    int signal_strength_level;  // Current tier (0=STATIC … 9=RESONANT), displayed as label
+    int duels_won;               // Number of duels won
+    int duels_lost;              // Number of duels lost
+    int stamina;                 // Presence — drains on duel loss, recovers over time (max 100)
     
     AppearanceType appearance;  // Player sprite choice (male/female/variant)
 
@@ -95,11 +96,13 @@ void codex_init(Codex* codex);
 void init_codex(Codex* codex, const char* player_name);
 
 // Signal logging
-void log_signal(Codex* codex, const char* signal_hash, int xp, SignalType signal_type);
+void log_signal(Codex* codex, const char* signal_hash, int gain, SignalType signal_type);
 
-// Duel XP
-void update_duel_xp(Codex* codex, int xp);
-void record_duel_result(Codex* codex, bool won, int xp);
+// Duel results
+void record_duel_result(Codex* codex, bool won);
+
+// Signal strength
+void apply_signal_gain(Codex* codex, int amount);
 
 // Encounters
 void log_encounter(Codex* codex, const char* signalborn_id,

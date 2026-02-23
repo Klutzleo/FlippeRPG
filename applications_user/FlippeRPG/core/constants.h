@@ -27,12 +27,41 @@ typedef enum {
     NUM_SHRINES
 } ShrineID;
 
+// Signal strength — the only visible measure of progression.
+// Players see labels only. Math runs underneath. Never expose raw score.
 typedef enum {
-    XP_SOURCE_SIGNAL,
-    XP_SOURCE_DUEL,
-    XP_SOURCE_SHRINE,
-    XP_SOURCE_FUSION   // optional, if you want fusion XP tracked separately
-} XPSource;
+    SIGNAL_STRENGTH_STATIC = 0,
+    SIGNAL_STRENGTH_FAINT,
+    SIGNAL_STRENGTH_TRACE,
+    SIGNAL_STRENGTH_RISING,
+    SIGNAL_STRENGTH_PRESENT,
+    SIGNAL_STRENGTH_CLEAR,
+    SIGNAL_STRENGTH_STRONG,
+    SIGNAL_STRENGTH_DEEP,
+    SIGNAL_STRENGTH_RESONANT_EDGE,
+    SIGNAL_STRENGTH_RESONANT,
+    SIGNAL_STRENGTH_COUNT
+} SignalStrengthLevel;
+
+// Steepening curve — early tiers are about learning, late tiers are about commitment.
+// Zero Day arrives at PRESENT by design.
+static const int signal_strength_thresholds[SIGNAL_STRENGTH_COUNT] = {
+    0,    // STATIC
+    51,   // FAINT
+    121,  // TRACE
+    221,  // RISING
+    351,  // PRESENT
+    501,  // CLEAR
+    651,  // STRONG
+    821,  // DEEP
+    1051, // RESONANT EDGE
+    1251  // RESONANT (community-gated — score alone cannot cross this)
+};
+
+static const char* const signal_strength_labels[SIGNAL_STRENGTH_COUNT] = {
+    "STATIC", "FAINT", "TRACE", "RISING", "PRESENT",
+    "CLEAR", "STRONG", "DEEP", "RESONANT EDGE", "RESONANT"
+};
 
 // Aura traits unlocked by shrines or lineage
 typedef enum {

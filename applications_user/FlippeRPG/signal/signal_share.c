@@ -1,7 +1,6 @@
 // signal_share.c
 #include "signal_share.h"
 #include "signal_engine.h"
-#include "../xp/xp_engine.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -13,8 +12,8 @@ void share_signal(Codex* codex, SignalType type, const char* signal_hash) {
 
 void receive_signal(Codex* codex, SignalType type, const char* signal_hash) {
     printf("[Signal] Received signal (%s) via %d\n", signal_hash, type);
-    int xp = calculate_signal_xp(codex, signal_hash);
-    log_signal(codex, signal_hash, xp, type);
+    int gain = calculate_signal_gain(codex, type);
+    log_signal(codex, signal_hash, gain, type);
 
     // Ambient aura feedback
     printf("[Aura] You sense a presence... Their aura is %s.\n", codex->aura_trait);
