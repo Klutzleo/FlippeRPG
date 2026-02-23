@@ -4,7 +4,6 @@
 #include <gui/view_dispatcher.h>
 #include <gui/modules/menu.h>
 #include <gui/modules/text_input.h>
-#include <notification/notification_messages.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -632,12 +631,6 @@ int32_t flippe_rpg_app(void* p) {
 
     // Load Codex — if no save exists, show name entry screen instead of using a default
     bool is_new_player = !load_codex(&player_codex, NULL);
-
-    // Quick visible cue: blink green LED once
-    NotificationApp* notification = furi_record_open(RECORD_NOTIFICATION);
-    notification_message_block(notification, &sequence_single_vibro);
-    notification_message_block(notification, &sequence_blink_green_100);
-    furi_record_close(RECORD_NOTIFICATION);
 
     // Create GUI and view dispatcher
     Gui* gui = furi_record_open(RECORD_GUI);

@@ -2,7 +2,6 @@
 #include <string.h>
 #include <stdio.h>
 #include "../core/utils.h"   // for popup_message
-#include "../xp/xp_engine.h" // for award_xp
 #include "../codex/codex.h"
 #include "../core/constants.h"
 #include <stdlib.h>
@@ -29,7 +28,7 @@ void fuse_echoes(Codex* codex, const char* echo_a, const char* echo_b) {
     // Example fusion logic
     a->fused = true;
     b->fused = true;
-    award_xp(codex, 10, XP_SOURCE_SIGNAL);
+    apply_signal_gain(codex, 10);
 }
 
 void echo_event(EchoState state) {
