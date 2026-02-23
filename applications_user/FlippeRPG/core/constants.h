@@ -8,21 +8,24 @@ typedef enum {
     SIGNAL_NFC,
     SIGNAL_BLUETOOTH,
     SIGNAL_RF,
+    SIGNAL_RFID,
     SIGNAL_UNKNOWN
 } SignalType;
 
 // Internal IDs use original code names — lore canonical names differ.
-// SHRINE_CAVE_THAT_LISTENS = "The Open Channel"    (Sub-GHz)
-// SHRINE_FLAME_REACH       = "The Fixed Gaze"      (IR)
-// SHRINE_BIND_WHISPER      = "The Exchange"         (NFC)
-// SHRINE_THREAD_TOUCH      = "The Unanswered Hello" (Bluetooth)
+// SHRINE_POCKET_CARRIED    = "The Unread"           (RFID)
 // SHRINE_ECHO_TOUCHED      = "The First Frequency"  (RF)
+// SHRINE_FLAME_REACH       = "The Fixed Gaze"       (IR)
+// SHRINE_CAVE_THAT_LISTENS = "The Open Channel"     (Sub-GHz)
+// SHRINE_BIND_WHISPER      = "The Exchange"          (NFC)
+// SHRINE_THREAD_TOUCH      = "The Unanswered Hello"  (Bluetooth)
 typedef enum {
-    SHRINE_CAVE_THAT_LISTENS,
+    SHRINE_POCKET_CARRIED,
+    SHRINE_ECHO_TOUCHED,
     SHRINE_FLAME_REACH,
+    SHRINE_CAVE_THAT_LISTENS,
     SHRINE_BIND_WHISPER,
     SHRINE_THREAD_TOUCH,
-    SHRINE_ECHO_TOUCHED,
     SHRINE_UNKNOWN,
     NUM_SHRINES
 } ShrineID;
@@ -82,11 +85,13 @@ typedef enum {
     // add more states as needed
 } EchoState;
 
-// Band gate progression — sequential unlock: RF → IR → SubGHz → NFC → Bluetooth
+// Band gate progression — sequential unlock: RFID → RF → IR → SubGHz → NFC → Bluetooth
 // 5 scans of a band unlocks the next. Bands are hidden until unlocked.
 // THE SUBSTRATE appears (with long vibration) after Bluetooth band completes.
 #define SCANS_PER_BAND 5
-static const SignalType band_order[5] = {
+#define NUM_BANDS 6
+static const SignalType band_order[NUM_BANDS] = {
+    SIGNAL_RFID,
     SIGNAL_RF,
     SIGNAL_IR,
     SIGNAL_SUBGHZ,

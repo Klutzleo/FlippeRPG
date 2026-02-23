@@ -42,6 +42,13 @@ int calculate_signal_gain(Codex* codex, SignalType type) {
     return 0;
 }
 
+// Handles RFID scans — routes through the same gain gate as all other bands.
+// tag_id is used directly as the hash (125kHz RFID UIDs are persistent and unique).
+void on_rfid_scan(Codex* codex, const char* tag_id) {
+    int gain = calculate_signal_gain(codex, SIGNAL_RFID);
+    log_signal(codex, tag_id, gain, SIGNAL_RFID);
+}
+
 // Handles NFC scans — routes through the same gain gate as all other bands.
 // tag_id is used directly as the hash (NFC UIDs are persistent and unique).
 void on_nfc_scan(Codex* codex, const char* tag_id) {

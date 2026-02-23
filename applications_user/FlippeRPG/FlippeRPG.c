@@ -248,6 +248,7 @@ static void codex_view_draw_callback(Canvas* canvas, void* model) {
 
 static const char* get_band_name(SignalType type) {
     switch(type) {
+        case SIGNAL_RFID:      return "RFID";
         case SIGNAL_RF:        return "RF";
         case SIGNAL_IR:        return "IR";
         case SIGNAL_SUBGHZ:    return "Sub-GHz";
@@ -280,8 +281,9 @@ static void signal_view_draw_callback(Canvas* canvas, void* model) {
     if(active_scan_band_index >= bands) active_scan_band_index = bands - 1;
 
     // Vertical band list — new bands appear at the bottom as they unlock
+    // Stride 7px: fits 6 bands (18,25,32,39,46,53) with footer clear at 62
     for(int i = 0; i < bands; i++) {
-        int y = 22 + (i * 9);
+        int y = 18 + (i * 7);
         const char* name = get_band_name(band_order[i]);
         if(i == active_scan_band_index) {
             canvas_draw_str(canvas, 0, y, ">");

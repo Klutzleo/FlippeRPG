@@ -75,11 +75,11 @@ typedef struct {
     TechniqueProgress techniques[MAX_TECHNIQUES];   // Techniques and mastery
 
     // Band gate state
-    // Bands unlock sequentially: RF → IR → SubGHz → NFC → Bluetooth
-    // Hidden until unlocked. substrate_unlocked fires exactly once after all 5 bands complete.
-    int  band_scans[5];      // Cumulative scan count per signal type (indexed by SignalType, 0..4)
-    int  bands_unlocked;     // How many bands are currently visible (starts at 1, max 5)
-    bool substrate_unlocked; // True after all 5 bands reach SCANS_PER_BAND
+    // Bands unlock sequentially: RFID → RF → IR → SubGHz → NFC → Bluetooth
+    // Hidden until unlocked. substrate_unlocked fires exactly once after all 6 bands complete.
+    int  band_scans[6];      // Cumulative scan count per signal type (indexed by SignalType, 0..5)
+    int  bands_unlocked;     // How many bands are currently visible (starts at 1, max 6)
+    bool substrate_unlocked; // True after all 6 bands reach SCANS_PER_BAND
 
     bool   storm_active;
     time_t storm_start_time;
@@ -88,7 +88,7 @@ typedef struct {
     bool   legacy_mode;     // Whether the Codex has entered legacy state
     char   legacy_title[16]; // Optional: “Signalborn”, “Stormtouched”, etc.
 
-    // Zero Day — set automatically when all five signal bands are complete.
+    // Zero Day — set automatically when all six signal bands are complete.
     // Immutable once set. Gates campfire, aura reveal, and PWA QR unlock.
     // Aura is determined by scan behavior and confirmed via PWA, not assigned here.
     bool   zero_day_confirmed;
