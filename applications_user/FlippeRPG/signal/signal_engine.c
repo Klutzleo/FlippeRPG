@@ -42,30 +42,11 @@ int calculate_signal_gain(Codex* codex, SignalType type) {
     return 0;
 }
 
-// Starts the signal listening loop (stubbed for now)
-void start_signal_loop(Codex* codex) {
-    // Simulate scanning a SubGHz signal
-    const char* dummy_signal = "433.92MHz:DEADBEEF";
-    char* hash = hash_signal(dummy_signal);
-    int gain = calculate_signal_gain(codex, SIGNAL_SUBGHZ);
-    log_signal(codex, hash, gain, SIGNAL_SUBGHZ);
-
-    printf("Scanned signal: %s → gain: %d\n", hash, gain);
-
-    // Trigger shrine logic for Cave That Listens (SubGHz ritual)
-    trigger_shrine(codex, SHRINE_CAVE_THAT_LISTENS, SIGNAL_SUBGHZ);
-
-    // Feedback if shrine was awakened
-    if(is_ritual_complete(codex, SHRINE_CAVE_THAT_LISTENS)) {
-        popup_message_str("Shrine awakened. Pulse Open unlocked.");
-    }
-}
-
-// Handles NFC scans and shrine rituals
+// Handles NFC scans — routes through the same gain gate as all other bands.
+// tag_id is used directly as the hash (NFC UIDs are persistent and unique).
 void on_nfc_scan(Codex* codex, const char* tag_id) {
-    (void)codex;
-    (void)tag_id;
-    // TODO: integrate Bind Whisper shrine proximity once available
+    int gain = calculate_signal_gain(codex, SIGNAL_NFC);
+    log_signal(codex, tag_id, gain, SIGNAL_NFC);
 }
 
 SignalType get_signal_type(Codex* codex, const char* signal_hash) {
