@@ -4,10 +4,11 @@
 #include <stdlib.h>
 #include <furi.h>
 
-#define AURA_FLAMEBOUND   "Flamebound"
-#define AURA_WHISPERED    "Whispered"
-#define AURA_ECHOFORGED   "Echoforged"
+#define AURA_CLEARSEEING  "Clearseeing"
+#define AURA_TOUCHMARKED  "Touchmarked"
+#define AURA_GROUNDED     "Grounded"
 #define AURA_STORMTOUCHED "Stormtouched"
+#define AURA_HEARD        "Heard"
 #define AURA_UNKNOWN      "Unknown"
 
 // Attempt a shrine ritual; success or failure determines outcome
@@ -45,8 +46,8 @@ static const SignalType shrine_requirements[NUM_SHRINES] = {
     [SHRINE_CAVE_THAT_LISTENS] = SIGNAL_SUBGHZ,
     [SHRINE_FLAME_REACH]       = SIGNAL_IR,
     [SHRINE_BIND_WHISPER]      = SIGNAL_NFC,
-    [SHRINE_THREAD_TOUCH]      = SIGNAL_GPIO,
-    [SHRINE_ECHO_TOUCHED]      = SIGNAL_FUSION,
+    [SHRINE_THREAD_TOUCH]      = SIGNAL_BLUETOOTH,
+    [SHRINE_ECHO_TOUCHED]      = SIGNAL_RF,
     [SHRINE_UNKNOWN]           = SIGNAL_UNKNOWN,
 };
 
@@ -93,10 +94,11 @@ void complete_shrine(Codex* codex, ShrineID shrine_id) {
 void assign_aura(Codex* codex, ShrineID shrine_id) {
     const char* aura = NULL;
     switch (shrine_id) {
-        case SHRINE_FLAME_REACH:       aura = AURA_FLAMEBOUND;   break;
-        case SHRINE_BIND_WHISPER:      aura = AURA_WHISPERED;    break;
-        case SHRINE_ECHO_TOUCHED:      aura = AURA_ECHOFORGED;   break;
+        case SHRINE_FLAME_REACH:       aura = AURA_CLEARSEEING;  break;
+        case SHRINE_BIND_WHISPER:      aura = AURA_TOUCHMARKED;  break;
+        case SHRINE_ECHO_TOUCHED:      aura = AURA_GROUNDED;     break;
         case SHRINE_CAVE_THAT_LISTENS: aura = AURA_STORMTOUCHED; break;
+        case SHRINE_THREAD_TOUCH:      aura = AURA_HEARD;        break;
         default:                       aura = AURA_UNKNOWN;      break;
     }
     snprintf(codex->aura_trait, sizeof(codex->aura_trait), "%s", aura);

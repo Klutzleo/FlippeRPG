@@ -6,11 +6,17 @@ typedef enum {
     SIGNAL_SUBGHZ,
     SIGNAL_IR,
     SIGNAL_NFC,
-    SIGNAL_GPIO,
-    SIGNAL_FUSION,
+    SIGNAL_BLUETOOTH,
+    SIGNAL_RF,
     SIGNAL_UNKNOWN
 } SignalType;
 
+// Internal IDs use original code names — lore canonical names differ.
+// SHRINE_CAVE_THAT_LISTENS = "The Open Channel"    (Sub-GHz)
+// SHRINE_FLAME_REACH       = "The Fixed Gaze"      (IR)
+// SHRINE_BIND_WHISPER      = "The Exchange"         (NFC)
+// SHRINE_THREAD_TOUCH      = "The Unanswered Hello" (Bluetooth)
+// SHRINE_ECHO_TOUCHED      = "The First Frequency"  (RF)
 typedef enum {
     SHRINE_CAVE_THAT_LISTENS,
     SHRINE_FLAME_REACH,
@@ -31,10 +37,11 @@ typedef enum {
 // Aura traits unlocked by shrines or lineage
 typedef enum {
     AURA_NONE,
-    AURA_FLAMEBOUND,
-    AURA_WHISPERED,
-    AURA_ECHOFORGED,
+    AURA_CLEARSEEING,
+    AURA_TOUCHMARKED,
+    AURA_GROUNDED,
     AURA_STORMTOUCHED,
+    AURA_HEARD,
     MAX_AURA_TRAITS
 } AuraTrait;
 

@@ -326,10 +326,10 @@ Why stick figures work great:
 ```
 
 **Aura-Specific Accessories:**
-- **Flamebound** - Spiky/jagged hat, fire wand with pointed tip
-- **Whispered** - Curved/wispy staff, flowing robe edges
+- **Clearseeing** - Spiky/jagged hat, fire wand with pointed tip
+- **Touchmarked** - Curved/wispy staff, flowing robe edges
 - **Stormtouched** - Lightning bolt on hat, zigzag wand
-- **Echoed** - Circular/spiral staff top, symmetrical design
+- **Grounded** - Circular/spiral staff top, symmetrical design
 
 ### Other Player Icon Approaches
 - **Silhouettes** - Solid black shapes with minimal detail (very visible, aura-specific shapes)

@@ -11,7 +11,7 @@ int main(void) {
     strncpy(test_codex.player_name, "Jason", 15);
 
     // Imprint a shrine tag
-    imprint_shrine_tag(SHRINE_FLAME_REACH, "TAG-FLAME", time(NULL), "Flamebound");
+    imprint_shrine_tag(SHRINE_FLAME_REACH, "TAG-FLAME", time(NULL), "Clearseeing");
 
     // Scan the shrine tag into the codex
     scan_shrine_tag(&test_codex, "TAG-FLAME");

@@ -181,11 +181,11 @@ cd tests
 - **Handshake XP**: +2 XP auto-gain when meeting players at campfire
 
 ### Aura Traits (Unlocked by Shrines)
-- **Flamebound** - Flame Reach shrine (IR signals)
-- **Whispered** - Bind Whisper shrine (NFC signals)
+- **Clearseeing** - Flame Reach shrine (IR signals)
+- **Touchmarked** - Bind Whisper shrine (NFC signals)
 - **Stormtouched** - Cave That Listens shrine (SubGHz signals)
-- **Echoforged** - Echo Touched shrine (signal fusion)
-- **Threaded** - Thread Touch shrine (GPIO signals)
+- **Grounded** - Echo Touched shrine (RF signals)
+- **Heard** - Thread Touch shrine (Bluetooth signals)
 
 ### Encounter & Echo System
 - **Encounter Log** - Records every Flipper you meet

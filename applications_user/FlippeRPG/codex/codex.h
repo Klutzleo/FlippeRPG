@@ -79,6 +79,13 @@ typedef struct {
     time_t save_timestamp;
     bool   legacy_mode;     // Whether the Codex has entered legacy state
     char   legacy_title[16]; // Optional: “Signalborn”, “Stormtouched”, etc.
+
+    // Zero Day — set automatically when all five signal bands are complete.
+    // Immutable once set. Gates campfire, aura reveal, and PWA QR unlock.
+    // Aura is determined by scan behavior and confirmed via PWA, not assigned here.
+    bool   zero_day_confirmed;
+    time_t zero_day_date;
+    char   faction[16];     // Set via PWA after Zero Day: “Operators”, “Nodes”, “Sovereigns”
 } Codex;
 
 // -------------------- FUNCTION DECLARATIONS --------------------

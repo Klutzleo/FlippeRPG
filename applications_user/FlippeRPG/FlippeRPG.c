@@ -74,22 +74,22 @@ static char name_buffer[16] = {0};
 // Shrine name and description lookup
 static const char* get_shrine_name(ShrineID id) {
     switch(id) {
-        case SHRINE_CAVE_THAT_LISTENS: return "Cave That Listens";
-        case SHRINE_FLAME_REACH: return "Flame Reach";
-        case SHRINE_BIND_WHISPER: return "Bind Whisper";
-        case SHRINE_THREAD_TOUCH: return "Thread Touch";
-        case SHRINE_ECHO_TOUCHED: return "Echo Touched";
+        case SHRINE_CAVE_THAT_LISTENS: return "The Open Channel";
+        case SHRINE_FLAME_REACH: return "The Fixed Gaze";
+        case SHRINE_BIND_WHISPER: return "The Exchange";
+        case SHRINE_THREAD_TOUCH: return "The Unanswered Hello";
+        case SHRINE_ECHO_TOUCHED: return "The First Frequency";
         default: return "Unknown Shrine";
     }
 }
 
 static const char* get_shrine_description(ShrineID id) {
     switch(id) {
-        case SHRINE_CAVE_THAT_LISTENS: return "Listen to SubGHz waves";
-        case SHRINE_FLAME_REACH: return "Absorb infrared signals";
-        case SHRINE_BIND_WHISPER: return "Feel NFC vibrations";
-        case SHRINE_THREAD_TOUCH: return "Touch GPIO connections";
-        case SHRINE_ECHO_TOUCHED: return "Fuse signal echoes";
+        case SHRINE_CAVE_THAT_LISTENS: return "Everything passes through here.";
+        case SHRINE_FLAME_REACH: return "It saw you before you saw it.";
+        case SHRINE_BIND_WHISPER: return "It will not come to you.";
+        case SHRINE_THREAD_TOUCH: return "Broadcasting. Still trying.";
+        case SHRINE_ECHO_TOUCHED: return "It was here before the city.";
         default: return "A mysterious shrine";
     }
 }
@@ -97,10 +97,10 @@ static const char* get_shrine_description(ShrineID id) {
 static const char* get_aura_name(ShrineID id) {
     switch(id) {
         case SHRINE_CAVE_THAT_LISTENS: return "Stormtouched";
-        case SHRINE_FLAME_REACH: return "Flamebound";
-        case SHRINE_BIND_WHISPER: return "Whispered";
-        case SHRINE_ECHO_TOUCHED: return "Echoforged";
-        case SHRINE_THREAD_TOUCH: return "Threaded";
+        case SHRINE_FLAME_REACH: return "Clearseeing";
+        case SHRINE_BIND_WHISPER: return "Touchmarked";
+        case SHRINE_ECHO_TOUCHED: return "Grounded";
+        case SHRINE_THREAD_TOUCH: return "Heard";
         default: return "Unknown";
     }
 }
@@ -119,7 +119,11 @@ static void main_menu_callback(void* context, uint32_t index) {
         case 2: // Techniques
             view_dispatcher_switch_to_view(view_dispatcher, VIEW_TECHNIQUE);
             break;
-        case 3: // Multiplayer (Campfire)
+        case 3: // Multiplayer (Campfire) — locked until Zero Day + faction confirmed
+            if(!player_codex.zero_day_confirmed || player_codex.faction[0] == '\0') {
+                // Not yet Rooted — campfire stays dark
+                break;
+            }
             selected_camp_slot = CAMP_NORTH;
             last_scan_tick = furi_get_tick();
             // Populate campfire from encounter log
@@ -158,7 +162,11 @@ static void codex_view_draw_callback(Canvas* canvas, void* model) {
     snprintf(line3, sizeof(line3), "Signal XP: %d", player_codex.xp_total);
     snprintf(line4, sizeof(line4), "Duel XP: %d", player_codex.duel_xp);
     snprintf(line5, sizeof(line5), "Duels: %dW / %dL", player_codex.duels_won, player_codex.duels_lost);
-    snprintf(line6, sizeof(line6), "Aura: %s", player_codex.aura_trait[0] ? player_codex.aura_trait : "Unbound");
+    // Aura is revealed only after Zero Day — determined by scan behavior via PWA
+    snprintf(line6, sizeof(line6), "Aura: %s",
+        player_codex.zero_day_confirmed && player_codex.aura_trait[0]
+            ? player_codex.aura_trait
+            : "Not yet revealed");
     
     canvas_draw_str(canvas, 2, 22, line1);
     canvas_draw_str(canvas, 2, 30, line2);
