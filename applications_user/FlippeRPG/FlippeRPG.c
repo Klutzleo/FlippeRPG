@@ -12,6 +12,7 @@
 #include "codex/codex.h"
 #include "duel/duel.h"
 #include "signal/signal_engine.h"
+#include "signal/rfid_scanner.h"
 #include "techniques/techniques.h"
 #include "save/save_system.h"
 #include "shrine/shrine.h"
@@ -69,6 +70,7 @@ static Codex player_codex = {0};
 static ViewDispatcher* view_dispatcher = NULL;
 static Menu* main_menu = NULL;          // Rebuilt dynamically when substrate unlocks
 static bool last_scan_absorbed = false; // Flip true after a scan, drives signal view feedback
+static bool rfid_scanning = false;      // True while LFRFIDWorker is listening for a card
 static int selected_shrine = 0;        // Currently selected shrine for detail view
 static int active_scan_band_index = 0; // Which unlocked band the signal view has selected
 static DuelState current_duel;         // Active duel state
@@ -149,6 +151,28 @@ static const char* get_aura_name(ShrineID id) {
         case SHRINE_THREAD_TOUCH: return "Heard";
         default: return "Unknown";
     }
+}
+
+// Forward declaration — defined later in this file
+static void trigger_substrate_unlock(void);
+
+// ==================== CUSTOM EVENT HANDLER ====================
+// Receives events posted from background worker threads (e.g. RFID scanner).
+static bool app_custom_event_callback(void* context, uint32_t event) {
+    (void)context;
+    if(event == RFID_SCAN_DONE_EVENT) {
+        char hash[32];
+        rfid_scanner_get_hash(hash, sizeof(hash));
+        rfid_scanner_stop();
+        rfid_scanning = false;
+        on_rfid_scan(&player_codex, hash);
+        last_scan_absorbed = true;
+        if(check_band_gate(&player_codex)) {
+            trigger_substrate_unlock();
+        }
+        return true;
+    }
+    return false;
 }
 
 // ==================== MENU VIEW ====================
@@ -293,8 +317,10 @@ static void signal_view_draw_callback(Canvas* canvas, void* model) {
         }
     }
 
-    // Footer: show last received signal strength, or navigation hint
-    if(last_scan_absorbed) {
+    // Footer: scanning state, last result, or navigation hint
+    if(rfid_scanning) {
+        canvas_draw_str(canvas, 2, 62, "Scanning... (Back: cancel)");
+    } else if(last_scan_absorbed) {
         char footer[32];
         snprintf(footer, sizeof(footer), "Signal: %s",
             signal_strength_labels[player_codex.signal_strength_level]);
@@ -321,14 +347,27 @@ static bool signal_view_input_callback(InputEvent* event, void* context) {
     }
     if(event->key == InputKeyOk) {
         SignalType scan_type = band_order[active_scan_band_index];
-        scan_band(&player_codex, scan_type);
-        last_scan_absorbed = true;
-        if(check_band_gate(&player_codex)) {
-            trigger_substrate_unlock();
+        if(scan_type == SIGNAL_RFID) {
+            // Real hardware — start async scan, result arrives via RFID_SCAN_DONE_EVENT
+            if(!rfid_scanning) {
+                rfid_scanner_start(view_dispatcher);
+                rfid_scanning = true;
+            }
+        } else {
+            // Simulated scan for bands not yet wired to hardware
+            scan_band(&player_codex, scan_type);
+            last_scan_absorbed = true;
+            if(check_band_gate(&player_codex)) {
+                trigger_substrate_unlock();
+            }
         }
         return true;
     }
     if(event->key == InputKeyBack) {
+        if(rfid_scanning) {
+            rfid_scanner_stop();
+            rfid_scanning = false;
+        }
         view_dispatcher_switch_to_view(view_dispatcher, VIEW_MENU);
         return true;
     }
@@ -745,6 +784,7 @@ int32_t flippe_rpg_app(void* p) {
     Gui* gui = furi_record_open(RECORD_GUI);
     view_dispatcher = view_dispatcher_alloc();
     view_dispatcher_attach_to_gui(view_dispatcher, gui, ViewDispatcherTypeFullscreen);
+    view_dispatcher_set_custom_event_callback(view_dispatcher, app_custom_event_callback);
 
     // ==================== VIEW 0: MAIN MENU ====================
     // Built dynamically — shows only Receive/Status/Exit until substrate unlocks.
@@ -833,6 +873,7 @@ int32_t flippe_rpg_app(void* p) {
     view_dispatcher_run(view_dispatcher);
 
     // ==================== CLEANUP ====================
+    rfid_scanner_stop(); // No-op if not active; guards against exit mid-scan
     view_dispatcher_remove_view(view_dispatcher, VIEW_MENU);
     view_dispatcher_remove_view(view_dispatcher, VIEW_CODEX);
     view_dispatcher_remove_view(view_dispatcher, VIEW_SIGNAL);
