@@ -49,6 +49,24 @@ void on_rfid_scan(Codex* codex, const char* tag_id) {
     log_signal(codex, tag_id, gain, SIGNAL_RFID);
 }
 
+// Handles raw RF scans — hash is RSSI-derived (ephemeral by design; RF has no UID).
+void on_rf_scan(Codex* codex, const char* signal_hash) {
+    int gain = calculate_signal_gain(codex, SIGNAL_RF);
+    log_signal(codex, signal_hash, gain, SIGNAL_RF);
+}
+
+// Handles IR scans — hash is "PROTO:ADDR:CMD", deterministic for the same source.
+void on_ir_scan(Codex* codex, const char* signal_hash) {
+    int gain = calculate_signal_gain(codex, SIGNAL_IR);
+    log_signal(codex, signal_hash, gain, SIGNAL_IR);
+}
+
+// Handles Sub-GHz scans — hash is "PROTO:HASH_BYTE" from the decoded protocol frame.
+void on_subghz_scan(Codex* codex, const char* signal_hash) {
+    int gain = calculate_signal_gain(codex, SIGNAL_SUBGHZ);
+    log_signal(codex, signal_hash, gain, SIGNAL_SUBGHZ);
+}
+
 // Handles NFC scans — routes through the same gain gate as all other bands.
 // tag_id is used directly as the hash (NFC UIDs are persistent and unique).
 void on_nfc_scan(Codex* codex, const char* tag_id) {

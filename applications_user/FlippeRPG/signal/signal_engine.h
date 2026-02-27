@@ -10,6 +10,9 @@ int calculate_signal_gain(Codex* codex, SignalType type);
 SignalType get_signal_type(Codex* codex, const char* signal_hash);
 int enter_manual_signal(Codex* codex, const char* signal_hash);
 void on_rfid_scan(Codex* codex, const char* tag_id);
+void on_rf_scan(Codex* codex, const char* signal_hash);
+void on_ir_scan(Codex* codex, const char* signal_hash);
+void on_subghz_scan(Codex* codex, const char* signal_hash);
 void on_nfc_scan(Codex* codex, const char* tag_id);
 
 // Scan a specific band type — used by the band-select signal view.

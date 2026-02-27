@@ -13,6 +13,9 @@
 #include "duel/duel.h"
 #include "signal/signal_engine.h"
 #include "signal/rfid_scanner.h"
+#include "signal/rf_scanner.h"
+#include "signal/ir_scanner.h"
+#include "signal/subghz_scanner.h"
 #include "techniques/techniques.h"
 #include "save/save_system.h"
 #include "shrine/shrine.h"
@@ -71,6 +74,9 @@ static ViewDispatcher* view_dispatcher = NULL;
 static Menu* main_menu = NULL;          // Rebuilt dynamically when substrate unlocks
 static bool last_scan_absorbed = false; // Flip true after a scan, drives signal view feedback
 static bool rfid_scanning = false;      // True while LFRFIDWorker is listening for a card
+static bool rf_scanning   = false;      // True while RF scan thread is running
+static bool ir_scanning     = false;    // True while IR scan thread is running
+static bool subghz_scanning = false;    // True while Sub-GHz scan thread is running
 static int selected_shrine = 0;        // Currently selected shrine for detail view
 static int active_scan_band_index = 0; // Which unlocked band the signal view has selected
 static DuelState current_duel;         // Active duel state
@@ -169,6 +175,49 @@ static bool app_custom_event_callback(void* context, uint32_t event) {
         last_scan_absorbed = true;
         if(check_band_gate(&player_codex)) {
             trigger_substrate_unlock();
+        }
+        return true;
+    }
+    if(event == RF_SCAN_DONE_EVENT && rf_scanning) {
+        char hash[32];
+        rf_scanner_get_hash(hash, sizeof(hash));
+        rf_scanning = false;
+        on_rf_scan(&player_codex, hash);
+        last_scan_absorbed = true;
+        if(check_band_gate(&player_codex)) {
+            trigger_substrate_unlock();
+        }
+        return true;
+    }
+    if(event == IR_SCAN_DONE_EVENT && ir_scanning) {
+        ir_scanning = false;
+        if(ir_scanner_has_signal()) {
+            char hash[32];
+            ir_scanner_get_hash(hash, sizeof(hash));
+            on_ir_scan(&player_codex, hash);
+            last_scan_absorbed = true;
+            if(check_band_gate(&player_codex)) {
+                trigger_substrate_unlock();
+            }
+        } else {
+            // Timeout with no signal — don't log, show "no signal" feedback
+            last_scan_absorbed = false;
+        }
+        return true;
+    }
+    if(event == SUBGHZ_SCAN_DONE_EVENT && subghz_scanning) {
+        subghz_scanning = false;
+        if(subghz_scanner_has_signal()) {
+            char hash[32];
+            subghz_scanner_get_hash(hash, sizeof(hash));
+            on_subghz_scan(&player_codex, hash);
+            last_scan_absorbed = true;
+            if(check_band_gate(&player_codex)) {
+                trigger_substrate_unlock();
+            }
+        } else {
+            // Timeout with no decodable frame — don't log
+            last_scan_absorbed = false;
         }
         return true;
     }
@@ -318,7 +367,7 @@ static void signal_view_draw_callback(Canvas* canvas, void* model) {
     }
 
     // Footer: scanning state, last result, or navigation hint
-    if(rfid_scanning) {
+    if(rfid_scanning || rf_scanning || ir_scanning || subghz_scanning) {
         canvas_draw_str(canvas, 2, 62, "Scanning... (Back: cancel)");
     } else if(last_scan_absorbed) {
         char footer[32];
@@ -353,6 +402,24 @@ static bool signal_view_input_callback(InputEvent* event, void* context) {
                 rfid_scanner_start(view_dispatcher);
                 rfid_scanning = true;
             }
+        } else if(scan_type == SIGNAL_RF) {
+            // Real hardware — 1.5s RSSI listen, result arrives via RF_SCAN_DONE_EVENT
+            if(!rf_scanning) {
+                rf_scanner_start(view_dispatcher);
+                rf_scanning = true;
+            }
+        } else if(scan_type == SIGNAL_IR) {
+            // Real hardware — 3s receive window, result arrives via IR_SCAN_DONE_EVENT
+            if(!ir_scanning) {
+                ir_scanner_start(view_dispatcher);
+                ir_scanning = true;
+            }
+        } else if(scan_type == SIGNAL_SUBGHZ) {
+            // Real hardware — 4s decode window, result arrives via SUBGHZ_SCAN_DONE_EVENT
+            if(!subghz_scanning) {
+                subghz_scanner_start(view_dispatcher);
+                subghz_scanning = true;
+            }
         } else {
             // Simulated scan for bands not yet wired to hardware
             scan_band(&player_codex, scan_type);
@@ -367,6 +434,18 @@ static bool signal_view_input_callback(InputEvent* event, void* context) {
         if(rfid_scanning) {
             rfid_scanner_stop();
             rfid_scanning = false;
+        }
+        if(rf_scanning) {
+            rf_scanner_stop();
+            rf_scanning = false;
+        }
+        if(ir_scanning) {
+            ir_scanner_stop();
+            ir_scanning = false;
+        }
+        if(subghz_scanning) {
+            subghz_scanner_stop();
+            subghz_scanning = false;
         }
         view_dispatcher_switch_to_view(view_dispatcher, VIEW_MENU);
         return true;
@@ -874,6 +953,9 @@ int32_t flippe_rpg_app(void* p) {
 
     // ==================== CLEANUP ====================
     rfid_scanner_stop(); // No-op if not active; guards against exit mid-scan
+    rf_scanner_stop();
+    ir_scanner_stop();
+    subghz_scanner_stop();
     view_dispatcher_remove_view(view_dispatcher, VIEW_MENU);
     view_dispatcher_remove_view(view_dispatcher, VIEW_CODEX);
     view_dispatcher_remove_view(view_dispatcher, VIEW_SIGNAL);
