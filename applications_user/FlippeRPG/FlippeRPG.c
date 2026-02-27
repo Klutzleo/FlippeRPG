@@ -16,6 +16,8 @@
 #include "signal/rf_scanner.h"
 #include "signal/ir_scanner.h"
 #include "signal/subghz_scanner.h"
+#include "signal/nfc_scanner.h"
+#include "signal/bt_scanner.h"
 #include "techniques/techniques.h"
 #include "save/save_system.h"
 #include "shrine/shrine.h"
@@ -77,6 +79,8 @@ static bool rfid_scanning = false;      // True while LFRFIDWorker is listening 
 static bool rf_scanning   = false;      // True while RF scan thread is running
 static bool ir_scanning     = false;    // True while IR scan thread is running
 static bool subghz_scanning = false;    // True while Sub-GHz scan thread is running
+static bool nfc_scanning    = false;    // True while NFC scan thread is running
+static bool bt_scanning     = false;    // True while BT scan thread is running
 static int selected_shrine = 0;        // Currently selected shrine for detail view
 static int active_scan_band_index = 0; // Which unlocked band the signal view has selected
 static DuelState current_duel;         // Active duel state
@@ -217,6 +221,38 @@ static bool app_custom_event_callback(void* context, uint32_t event) {
             }
         } else {
             // Timeout with no decodable frame — don't log
+            last_scan_absorbed = false;
+        }
+        return true;
+    }
+    if(event == NFC_SCAN_DONE_EVENT && nfc_scanning) {
+        nfc_scanning = false;
+        if(nfc_scanner_has_signal()) {
+            char hash[32];
+            nfc_scanner_get_hash(hash, sizeof(hash));
+            on_nfc_scan(&player_codex, hash);
+            last_scan_absorbed = true;
+            if(check_band_gate(&player_codex)) {
+                trigger_substrate_unlock();
+            }
+        } else {
+            // Timeout with no card in field — don't log
+            last_scan_absorbed = false;
+        }
+        return true;
+    }
+    if(event == BT_SCAN_DONE_EVENT && bt_scanning) {
+        bt_scanning = false;
+        if(bt_scanner_has_signal()) {
+            char hash[32];
+            bt_scanner_get_hash(hash, sizeof(hash));
+            on_bt_scan(&player_codex, hash);
+            last_scan_absorbed = true;
+            if(check_band_gate(&player_codex)) {
+                trigger_substrate_unlock();
+            }
+        } else {
+            // No BLE activity above noise floor — don't log
             last_scan_absorbed = false;
         }
         return true;
@@ -367,7 +403,7 @@ static void signal_view_draw_callback(Canvas* canvas, void* model) {
     }
 
     // Footer: scanning state, last result, or navigation hint
-    if(rfid_scanning || rf_scanning || ir_scanning || subghz_scanning) {
+    if(rfid_scanning || rf_scanning || ir_scanning || subghz_scanning || nfc_scanning || bt_scanning) {
         canvas_draw_str(canvas, 2, 62, "Scanning... (Back: cancel)");
     } else if(last_scan_absorbed) {
         char footer[32];
@@ -420,6 +456,18 @@ static bool signal_view_input_callback(InputEvent* event, void* context) {
                 subghz_scanner_start(view_dispatcher);
                 subghz_scanning = true;
             }
+        } else if(scan_type == SIGNAL_NFC) {
+            // Real hardware — 5s poll window, result arrives via NFC_SCAN_DONE_EVENT
+            if(!nfc_scanning) {
+                nfc_scanner_start(view_dispatcher);
+                nfc_scanning = true;
+            }
+        } else if(scan_type == SIGNAL_BLUETOOTH) {
+            // Real hardware — 3s RSSI listen on BLE advertising channels, result via BT_SCAN_DONE_EVENT
+            if(!bt_scanning) {
+                bt_scanner_start(view_dispatcher);
+                bt_scanning = true;
+            }
         } else {
             // Simulated scan for bands not yet wired to hardware
             scan_band(&player_codex, scan_type);
@@ -446,6 +494,14 @@ static bool signal_view_input_callback(InputEvent* event, void* context) {
         if(subghz_scanning) {
             subghz_scanner_stop();
             subghz_scanning = false;
+        }
+        if(nfc_scanning) {
+            nfc_scanner_stop();
+            nfc_scanning = false;
+        }
+        if(bt_scanning) {
+            bt_scanner_stop();
+            bt_scanning = false;
         }
         view_dispatcher_switch_to_view(view_dispatcher, VIEW_MENU);
         return true;
@@ -956,6 +1012,8 @@ int32_t flippe_rpg_app(void* p) {
     rf_scanner_stop();
     ir_scanner_stop();
     subghz_scanner_stop();
+    nfc_scanner_stop();
+    bt_scanner_stop();
     view_dispatcher_remove_view(view_dispatcher, VIEW_MENU);
     view_dispatcher_remove_view(view_dispatcher, VIEW_CODEX);
     view_dispatcher_remove_view(view_dispatcher, VIEW_SIGNAL);

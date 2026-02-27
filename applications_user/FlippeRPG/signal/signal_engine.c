@@ -74,6 +74,13 @@ void on_nfc_scan(Codex* codex, const char* tag_id) {
     log_signal(codex, tag_id, gain, SIGNAL_NFC);
 }
 
+// Handles BT scans — hash is RSSI-derived + tick (ephemeral; passive listening has no UID).
+// The Unanswered Hello: something was broadcasting. We heard it.
+void on_bt_scan(Codex* codex, const char* signal_hash) {
+    int gain = calculate_signal_gain(codex, SIGNAL_BLUETOOTH);
+    log_signal(codex, signal_hash, gain, SIGNAL_BLUETOOTH);
+}
+
 SignalType get_signal_type(Codex* codex, const char* signal_hash) {
     for(int i = 0; i < MAX_SIGNALS; i++) {
         if(strcmp(codex->signal_history[i].hash, signal_hash) == 0) {

@@ -14,6 +14,7 @@ void on_rf_scan(Codex* codex, const char* signal_hash);
 void on_ir_scan(Codex* codex, const char* signal_hash);
 void on_subghz_scan(Codex* codex, const char* signal_hash);
 void on_nfc_scan(Codex* codex, const char* tag_id);
+void on_bt_scan(Codex* codex, const char* signal_hash);
 
 // Scan a specific band type — used by the band-select signal view.
 // Generates a hash, calculates gain, logs the signal, and returns the gain awarded.
