@@ -269,8 +269,10 @@ bool check_band_gate(Codex* codex) {
            codex->band_scans[(int)SIGNAL_SUBGHZ]    >= SCANS_PER_BAND &&
            codex->band_scans[(int)SIGNAL_NFC]       >= SCANS_PER_BAND &&
            codex->band_scans[(int)SIGNAL_BLUETOOTH] >= SCANS_PER_BAND) {
-            codex->substrate_unlocked = true;
-            return true; // Caller fires the long vibration
+            codex->substrate_unlocked  = true;
+            codex->zero_day_confirmed  = true;
+            codex->zero_day_date       = furi_get_tick();
+            return true; // Caller fires CQ Morse — the only haptic in the game
         }
     }
     return false;

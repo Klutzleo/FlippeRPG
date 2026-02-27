@@ -861,24 +861,66 @@ static bool duel_input_callback(InputEvent* event, void* context) {
 }
 
 // ==================== THE SUBSTRATE VIEW ====================
+// Layout: left column = player data, right column = QR zone (44×44px)
+//
+// QR payload format:  FLRP:<codex_id>:<signal_level>:<band_scans>
+//   e.g.              FLRP:CDX1234:4:555555
+//   Fields: FLRP magic | unique player ID | signal strength (0-9) | one digit per band
+//
+// To enable real scanning: bundle qrcodegen.h/.c from
+//   https://github.com/nayuki/QR-Code-generator/tree/master/c
+// Then replace the placeholder block below with:
+//   uint8_t qr[qrcodegen_BUFFER_LEN_FOR_VERSION(5)];
+//   uint8_t tmp[qrcodegen_BUFFER_LEN_FOR_VERSION(5)];
+//   if(qrcodegen_encodeText(payload, tmp, qr, qrcodegen_Ecc_LOW,
+//           qrcodegen_VERSION_MIN, 5, qrcodegen_Mask_AUTO, true)) {
+//       int sz = qrcodegen_getSize(qr);
+//       for(int qy = 0; qy < sz; qy++)
+//           for(int qx = 0; qx < sz; qx++)
+//               if(qrcodegen_getModule(qr, qx, qy))
+//                   canvas_draw_box(canvas, 82 + qx*2, 10 + qy*2, 2, 2);
+//   }
 static void substrate_view_draw_callback(Canvas* canvas, void* model) {
     (void)model;
     canvas_clear(canvas);
+
+    // Title + divider
     canvas_set_font(canvas, FontPrimary);
-    canvas_draw_str(canvas, 2, 10, "THE SUBSTRATE");
+    canvas_draw_str(canvas, 2, 9, "THE SUBSTRATE");
+    canvas_draw_line(canvas, 0, 11, 127, 11);
 
-    // QR code placeholder — actual encoding via PWA (codex ID + state)
-    canvas_draw_frame(canvas, 40, 14, 48, 40);
+    // QR payload — what the QR code encodes (shown as text fallback until library bundled)
+    // Format: FLRP:<id>:<signal_level>:<6 band digits>  e.g. FLRP:CDX1234:4:555555
+    // Band digits capped 0-9 and stored as chars to give compiler a bounded output size.
+    #define BS(t) (char)('0' + (player_codex.band_scans[(int)(t)] > 9 ? 9 : \
+                                (player_codex.band_scans[(int)(t)] < 0 ? 0 : \
+                                 player_codex.band_scans[(int)(t)])))
+    char payload[48];
+    snprintf(payload, sizeof(payload), "FLRP:%s:%d:%c%c%c%c%c%c",
+        player_codex.codex_id,
+        player_codex.signal_strength_level,
+        BS(SIGNAL_RFID), BS(SIGNAL_RF), BS(SIGNAL_IR),
+        BS(SIGNAL_SUBGHZ), BS(SIGNAL_NFC), BS(SIGNAL_BLUETOOTH));
+    #undef BS
+
+    // Left column: key player data
     canvas_set_font(canvas, FontSecondary);
-    canvas_draw_str(canvas, 50, 32, "[ QR ]");
-    canvas_draw_str(canvas, 48, 42, "COMING");
+    char line[24];
+    snprintf(line, sizeof(line), "ID: %s", player_codex.codex_id);
+    canvas_draw_str(canvas, 2, 22, line);
+    snprintf(line, sizeof(line), "Sig: %s",
+        signal_strength_labels[player_codex.signal_strength_level]);
+    canvas_draw_str(canvas, 2, 31, line);
+    canvas_draw_str(canvas, 2, 46, payload);
 
-    // Codex ID shown beneath — scanned by PWA to identify this Signalborn
-    char id_line[24];
-    snprintf(id_line, sizeof(id_line), "ID: %s", player_codex.codex_id);
-    canvas_draw_str(canvas, 2, 54, id_line);
+    // Right column: QR zone (44×44px at x=82, y=10)
+    // ── Placeholder — swap for qrcodegen render when library is bundled ──
+    canvas_draw_frame(canvas, 82, 10, 44, 44);
+    canvas_draw_str(canvas, 92, 30, "QR");
+    canvas_draw_str(canvas, 87, 40, "soon");
+    // ── End placeholder ──
 
-    canvas_draw_str(canvas, 2, 62, "Back: Menu");
+    canvas_draw_str(canvas, 2, 63, "Back: Menu");
 }
 
 static bool substrate_view_input_callback(InputEvent* event, void* context) {
