@@ -312,14 +312,14 @@ static void build_menu(void) {
         menu_free(main_menu);
     }
     main_menu = menu_alloc();
-    menu_add_item(main_menu, "Receive", NULL, MENU_ID_SIGNALS, main_menu_callback, NULL);
+    menu_add_item(main_menu, "Attune",        NULL, MENU_ID_SIGNALS,   main_menu_callback, NULL);
     if(player_codex.substrate_unlocked) {
-        menu_add_item(main_menu, "The Substrate",  NULL, MENU_ID_SUBSTRATE, main_menu_callback, NULL);
-        menu_add_item(main_menu, "Shrines",        NULL, MENU_ID_SHRINES,   main_menu_callback, NULL);
-        menu_add_item(main_menu, "Campfire",       NULL, MENU_ID_CAMPFIRE,  main_menu_callback, NULL);
+        menu_add_item(main_menu, "The Substrate", NULL, MENU_ID_SUBSTRATE, main_menu_callback, NULL);
+        menu_add_item(main_menu, "Shrines",       NULL, MENU_ID_SHRINES,   main_menu_callback, NULL);
+        menu_add_item(main_menu, "Campfire",      NULL, MENU_ID_CAMPFIRE,  main_menu_callback, NULL);
     }
-    menu_add_item(main_menu, "Status", NULL, MENU_ID_STATUS, main_menu_callback, NULL);
-    menu_add_item(main_menu, "Exit",   NULL, MENU_ID_EXIT,   main_menu_callback, NULL);
+    menu_add_item(main_menu, "Status",        NULL, MENU_ID_STATUS,    main_menu_callback, NULL);
+    menu_add_item(main_menu, "Exit",          NULL, MENU_ID_EXIT,      main_menu_callback, NULL);
     view_dispatcher_add_view(view_dispatcher, VIEW_MENU, menu_get_view(main_menu));
 }
 
@@ -386,7 +386,7 @@ static void signal_view_draw_callback(Canvas* canvas, void* model) {
     (void)model;
     canvas_clear(canvas);
     canvas_set_font(canvas, FontPrimary);
-    canvas_draw_str(canvas, 2, 10, "Receive");
+    canvas_draw_str(canvas, 2, 10, "Attune");
 
     canvas_set_font(canvas, FontSecondary);
 

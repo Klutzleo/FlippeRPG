@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <furi.h>
+#include <applications/services/dolphin/dolphin.h>
 #include "../shrine/shrine.h"
 #include "../codex/codex.h"
 #include "../core/utils.h"
@@ -47,24 +48,28 @@ int calculate_signal_gain(Codex* codex, SignalType type) {
 void on_rfid_scan(Codex* codex, const char* tag_id) {
     int gain = calculate_signal_gain(codex, SIGNAL_RFID);
     log_signal(codex, tag_id, gain, SIGNAL_RFID);
+    dolphin_deed(DolphinDeedRfidRead);
 }
 
 // Handles raw RF scans — hash is RSSI-derived (ephemeral by design; RF has no UID).
 void on_rf_scan(Codex* codex, const char* signal_hash) {
     int gain = calculate_signal_gain(codex, SIGNAL_RF);
     log_signal(codex, signal_hash, gain, SIGNAL_RF);
+    dolphin_deed(DolphinDeedSubGhzFrequencyAnalyzer);
 }
 
 // Handles IR scans — hash is "PROTO:ADDR:CMD", deterministic for the same source.
 void on_ir_scan(Codex* codex, const char* signal_hash) {
     int gain = calculate_signal_gain(codex, SIGNAL_IR);
     log_signal(codex, signal_hash, gain, SIGNAL_IR);
+    dolphin_deed(DolphinDeedIrLearnSuccess);
 }
 
 // Handles Sub-GHz scans — hash is "PROTO:HASH_BYTE" from the decoded protocol frame.
 void on_subghz_scan(Codex* codex, const char* signal_hash) {
     int gain = calculate_signal_gain(codex, SIGNAL_SUBGHZ);
     log_signal(codex, signal_hash, gain, SIGNAL_SUBGHZ);
+    dolphin_deed(DolphinDeedSubGhzReceiverInfo);
 }
 
 // Handles NFC scans — routes through the same gain gate as all other bands.
@@ -72,6 +77,7 @@ void on_subghz_scan(Codex* codex, const char* signal_hash) {
 void on_nfc_scan(Codex* codex, const char* tag_id) {
     int gain = calculate_signal_gain(codex, SIGNAL_NFC);
     log_signal(codex, tag_id, gain, SIGNAL_NFC);
+    dolphin_deed(DolphinDeedNfcRead);
 }
 
 // Handles BT scans — hash is RSSI-derived + tick (ephemeral; passive listening has no UID).
@@ -79,6 +85,7 @@ void on_nfc_scan(Codex* codex, const char* tag_id) {
 void on_bt_scan(Codex* codex, const char* signal_hash) {
     int gain = calculate_signal_gain(codex, SIGNAL_BLUETOOTH);
     log_signal(codex, signal_hash, gain, SIGNAL_BLUETOOTH);
+    dolphin_deed(DolphinDeedPluginGameWin);
 }
 
 SignalType get_signal_type(Codex* codex, const char* signal_hash) {
