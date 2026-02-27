@@ -23,6 +23,7 @@
 #include "shrine/shrine.h"
 #include "core/utils.h"
 #include "core/constants.h"
+#include "qr/qrcodegen.h"
 // Assets: icon animations compiled from root assets/icons
 #include <assets_icons.h>
 #include <gui/icon_animation.h>
@@ -328,29 +329,33 @@ static void codex_view_draw_callback(Canvas* canvas, void* model) {
     canvas_clear(canvas);
     canvas_set_font(canvas, FontPrimary);
     canvas_draw_str(canvas, 2, 12, "Codex Status");
-    
+
     canvas_set_font(canvas, FontSecondary);
-    char line1[64], line2[64], line3[64], line4[64], line5[64], line6[64];
-    snprintf(line1, sizeof(line1), "Name: %s", player_codex.player_name);
-    snprintf(line2, sizeof(line2), "ID: %s", player_codex.codex_id);
-    snprintf(line3, sizeof(line3), "Signal: %s",
+    char line[64];
+
+    snprintf(line, sizeof(line), "Name: %s", player_codex.player_name);
+    canvas_draw_str(canvas, 2, 22, line);
+
+    snprintf(line, sizeof(line), "ID: %s", player_codex.codex_id);
+    canvas_draw_str(canvas, 2, 30, line);
+
+    snprintf(line, sizeof(line), "Signal: %s",
         signal_strength_labels[player_codex.signal_strength_level]);
-    snprintf(line4, sizeof(line4), "Duels: %dW / %dL",
-        player_codex.duels_won, player_codex.duels_lost);
-    snprintf(line5, sizeof(line5), "Faction: %s",
-        player_codex.faction[0] ? player_codex.faction : "Unaligned");
-    // Aura is revealed only after Zero Day — determined by scan behavior via PWA
-    snprintf(line6, sizeof(line6), "Aura: %s",
-        player_codex.zero_day_confirmed && player_codex.aura_trait[0]
-            ? player_codex.aura_trait
-            : "Not yet revealed");
-    
-    canvas_draw_str(canvas, 2, 22, line1);
-    canvas_draw_str(canvas, 2, 30, line2);
-    canvas_draw_str(canvas, 2, 38, line3);
-    canvas_draw_str(canvas, 2, 46, line4);
-    canvas_draw_str(canvas, 2, 54, line5);
-    canvas_draw_str(canvas, 2, 62, line6);
+    canvas_draw_str(canvas, 2, 38, line);
+
+    if(player_codex.zero_day_confirmed) {
+        snprintf(line, sizeof(line), "Duels: %dW / %dL",
+            player_codex.duels_won, player_codex.duels_lost);
+        canvas_draw_str(canvas, 2, 46, line);
+
+        snprintf(line, sizeof(line), "Faction: %s",
+            player_codex.faction[0] ? player_codex.faction : "Unaligned");
+        canvas_draw_str(canvas, 2, 54, line);
+
+        snprintf(line, sizeof(line), "Aura: %s",
+            player_codex.aura_trait[0] ? player_codex.aura_trait : "Unknown");
+        canvas_draw_str(canvas, 2, 62, line);
+    }
 }
 
 // ==================== RECEIVE VIEW ====================
@@ -884,14 +889,9 @@ static void substrate_view_draw_callback(Canvas* canvas, void* model) {
     (void)model;
     canvas_clear(canvas);
 
-    // Title + divider
-    canvas_set_font(canvas, FontPrimary);
-    canvas_draw_str(canvas, 2, 9, "THE SUBSTRATE");
-    canvas_draw_line(canvas, 0, 11, 127, 11);
-
-    // QR payload — what the QR code encodes (shown as text fallback until library bundled)
-    // Format: FLRP:<id>:<signal_level>:<6 band digits>  e.g. FLRP:CDX1234:4:555555
-    // Band digits capped 0-9 and stored as chars to give compiler a bounded output size.
+    // Build QR payload: FLRP:<codex_id>:<signal_level>:<6 band digits>
+    // e.g. FLRP:CDX1234:4:555555
+    // Band digits capped 0-9 via char arithmetic to satisfy -Werror=format-truncation.
     #define BS(t) (char)('0' + (player_codex.band_scans[(int)(t)] > 9 ? 9 : \
                                 (player_codex.band_scans[(int)(t)] < 0 ? 0 : \
                                  player_codex.band_scans[(int)(t)])))
@@ -903,23 +903,27 @@ static void substrate_view_draw_callback(Canvas* canvas, void* model) {
         BS(SIGNAL_SUBGHZ), BS(SIGNAL_NFC), BS(SIGNAL_BLUETOOTH));
     #undef BS
 
-    // Left column: key player data
+    // Render QR code — v1 (21×21 modules) at 2px/module = 42×42px
+    // Centered on 128×64: x_off=43, y_off=4
+    uint8_t qr[qrcodegen_BUFFER_LEN_FOR_VERSION(1)];
+    uint8_t tmp[qrcodegen_BUFFER_LEN_FOR_VERSION(1)];
+    if(qrcodegen_encodeText(payload, tmp, qr, qrcodegen_Ecc_LOW,
+            qrcodegen_VERSION_MIN, 1, qrcodegen_Mask_AUTO, true)) {
+        int sz = qrcodegen_getSize(qr);
+        int x_off = (128 - sz * 2) / 2;
+        int y_off = 4;
+        for(int qy = 0; qy < sz; qy++) {
+            for(int qx = 0; qx < sz; qx++) {
+                if(qrcodegen_getModule(qr, qx, qy)) {
+                    canvas_draw_box(canvas, x_off + qx * 2, y_off + qy * 2, 2, 2);
+                }
+            }
+        }
+    }
+
+    // Payload text below QR as manual fallback
     canvas_set_font(canvas, FontSecondary);
-    char line[24];
-    snprintf(line, sizeof(line), "ID: %s", player_codex.codex_id);
-    canvas_draw_str(canvas, 2, 22, line);
-    snprintf(line, sizeof(line), "Sig: %s",
-        signal_strength_labels[player_codex.signal_strength_level]);
-    canvas_draw_str(canvas, 2, 31, line);
-    canvas_draw_str(canvas, 2, 46, payload);
-
-    // Right column: QR zone (44×44px at x=82, y=10)
-    // ── Placeholder — swap for qrcodegen render when library is bundled ──
-    canvas_draw_frame(canvas, 82, 10, 44, 44);
-    canvas_draw_str(canvas, 92, 30, "QR");
-    canvas_draw_str(canvas, 87, 40, "soon");
-    // ── End placeholder ──
-
+    canvas_draw_str(canvas, 2, 56, payload);
     canvas_draw_str(canvas, 2, 63, "Back: Menu");
 }
 
