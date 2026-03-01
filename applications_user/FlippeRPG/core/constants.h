@@ -85,14 +85,13 @@ typedef enum {
     // add more states as needed
 } EchoState;
 
-// Band gate progression — sequential unlock: RFID → RF → IR → SubGHz → NFC → Bluetooth
-// 5 scans of a band unlocks the next. Bands are hidden until unlocked.
-// THE SUBSTRATE appears (with long vibration) after Bluetooth band completes.
+// Band gate progression — Tier 1 (Tutorial → Zero Day):
+// IR → Sub-GHz → NFC → Bluetooth. 5 scans each, sequential, hidden until unlocked.
+// THE SUBSTRATE fires (CQ Morse) after all 4 Tier 1 bands complete.
+// RFID and RF are Tier 2 (post-Zero Day). GPIO and iButton are Tier 3 (post-DEEP).
 #define SCANS_PER_BAND 5
-#define NUM_BANDS 6
+#define NUM_BANDS 4
 static const SignalType band_order[NUM_BANDS] = {
-    SIGNAL_RFID,
-    SIGNAL_RF,
     SIGNAL_IR,
     SIGNAL_SUBGHZ,
     SIGNAL_NFC,

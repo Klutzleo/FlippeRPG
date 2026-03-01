@@ -42,6 +42,7 @@ enum {
     VIEW_DUEL = 8,
     VIEW_SUBSTRATE = 9,
     VIEW_BAND_DETAIL = 10,
+    VIEW_TRANSMISSION = 11,
 };
 
 // Fixed menu callback IDs — stable regardless of which items are currently visible.
@@ -87,24 +88,67 @@ static int selected_shrine = 0;        // Currently selected shrine for detail v
 static int active_scan_band_index = 0; // Which unlocked band the signal view has selected
 static int last_scan_gain = -1;        // Gain from last completed scan (-1 = no result yet)
 
-// Per-band flavor text (indexed by position in band_order, not by SignalType value)
-// Source: lore/signal_lexicon.md band-level descriptors — no lore names revealed here
+// Per-band flavor text — shown on band detail screen before scanning.
+// Indexed by position in band_order[]: IR, Sub-GHz, NFC, Bluetooth.
+// Source: lore/signal_lexicon.md band-level descriptors. No lore names revealed here.
 static const char* BAND_FLAVOR_1[] = {
-    "Already on you.",          // RFID
-    "Indifferent. Geological.", // RF
     "Line of sight. Patient.",  // IR
     "Through walls.",           // Sub-GHz
     "Reciprocal. Deliberate.",  // NFC
     "Loud. Crowded.",           // Bluetooth
 };
 static const char* BAND_FLAVOR_2[] = {
-    "Already transmitting.",    // RFID
-    "Unreadable.",              // RF
     "Domestic.",                // IR
     "Without asking.",          // Sub-GHz
     "The first to ask.",        // NFC
     "Heartbreaking.",           // Bluetooth
 };
+// Transmission system — 4 bands × 5 levels (Ambient→Noticed→Responsive→Urgent→Threshold)
+// Text drawn directly from lore/signal_lexicon.md and lore/signal_read.md.
+// Each transmission is up to 3 lines, pre-split for 128px width at FontSecondary (~25 chars/line).
+// Indexed: [band_order position 0..3][scan number 0..4][line 0..2]
+// NULL line = end of text for that transmission.
+static const char* TRANSMISSIONS[4][5][3] = {
+    // IR (band_order[0])
+    {
+        { "Something in this room",    "has been waiting",          "to be told what to do."   }, // Ambient
+        { "It understood you",         "before you understood it.", NULL                        }, // Noticed
+        { "Every button you pressed",  "was a transmission",        "you didn't know you sent." }, // Responsive
+        { "You felt watched",          "before you scanned.",       "You were right."           }, // Urgent
+        { "It saw you first.",         "Patient. Domestic.",        "It never stopped watching."}, // Threshold
+    },
+    // Sub-GHz (band_order[1])
+    {
+        { "Restless. Always moving.",  NULL,                        NULL                        }, // Ambient
+        { "Through walls.",            "Through you.",              "Without asking."           }, // Noticed
+        { "It doesn't need a door.",   NULL,                        NULL                        }, // Responsive
+        { "It was passing through you","before you knew",           "what you were."            }, // Urgent
+        { "You were never as alone",   "as you thought.",           NULL                        }, // Threshold
+    },
+    // NFC (band_order[2])
+    {
+        { "You had to get close.",     NULL,                        NULL                        }, // Ambient
+        { "The exchange is visible.",  "Not just this one.",        "Every one before."         }, // Noticed
+        { "It waited.",               "You closed the distance.",  NULL                        }, // Responsive
+        { "It asked before it took.",  "First time anything did.",  NULL                        }, // Urgent
+        { "You didn't know",           "how much that mattered",    "until now."                }, // Threshold
+    },
+    // Bluetooth (band_order[3])
+    {
+        { "Everything in range",       "is announcing itself.",     NULL                        }, // Ambient
+        { "Has been since",            "you walked in.",            NULL                        }, // Noticed
+        { "None of them know",         "if anyone heard.",          NULL                        }, // Responsive
+        { "You have been broadcasting","your whole life",           "into a crowded frequency." }, // Urgent
+        { "Someone was listening.",    NULL,                        NULL                        }, // Threshold
+    },
+};
+
+// State for the active transmission being displayed
+static int pending_tx_band  = 0; // band_order index (0..3)
+static int pending_tx_index = 0; // scan number (0..4, maps to Ambient..Threshold)
+
+static bool pending_substrate_unlock = false; // Set when gate triggers; fires after Threshold tx
+
 static DuelState current_duel;         // Active duel state
 
 // CQ in Morse code: ─·─· (C) then ─ ─·─ (Q)
@@ -191,6 +235,32 @@ static const char* get_band_name(SignalType type);
 
 // ==================== CUSTOM EVENT HANDLER ====================
 // Receives events posted from background worker threads (e.g. RFID scanner).
+// Called after a successful Tier 1 scan. Determines which transmission to show,
+// sets pending_substrate_unlock if the band just completed, and switches view.
+static void handle_tier1_scan_success(SignalType type) {
+    // Find this band's index in band_order
+    int bi = -1;
+    for(int i = 0; i < NUM_BANDS; i++) {
+        if(band_order[i] == type) { bi = i; break; }
+    }
+    if(bi < 0) return; // Not a Tier 1 band — no transmission
+
+    // Which scan number just completed? (band_scans already incremented by log_signal)
+    int scans = player_codex.band_scans[(int)type];
+    int tx_index = scans - 1;
+    if(tx_index < 0) tx_index = 0;
+    if(tx_index > 4) tx_index = 4; // Cap at Threshold
+
+    // If this is the 5th scan, check the gate and defer the unlock to tx confirm
+    if(scans == SCANS_PER_BAND) {
+        pending_substrate_unlock = check_band_gate(&player_codex);
+    }
+
+    pending_tx_band  = bi;
+    pending_tx_index = tx_index;
+    view_dispatcher_switch_to_view(view_dispatcher, VIEW_TRANSMISSION);
+}
+
 static bool app_custom_event_callback(void* context, uint32_t event) {
     (void)context;
     if(event == RFID_SCAN_DONE_EVENT) {
@@ -198,7 +268,7 @@ static bool app_custom_event_callback(void* context, uint32_t event) {
         rfid_scanner_get_hash(hash, sizeof(hash));
         rfid_scanner_stop();
         rfid_scanning = false;
-        last_scan_gain = calculate_signal_gain(&player_codex, SIGNAL_RFID);
+        last_scan_gain = calculate_signal_gain(&player_codex, hash);
         on_rfid_scan(&player_codex, hash);
         last_scan_absorbed = true;
         if(check_band_gate(&player_codex)) {
@@ -211,7 +281,7 @@ static bool app_custom_event_callback(void* context, uint32_t event) {
         char hash[32];
         rf_scanner_get_hash(hash, sizeof(hash));
         rf_scanning = false;
-        last_scan_gain = calculate_signal_gain(&player_codex, SIGNAL_RF);
+        last_scan_gain = calculate_signal_gain(&player_codex, hash);
         on_rf_scan(&player_codex, hash);
         last_scan_absorbed = true;
         if(check_band_gate(&player_codex)) {
@@ -221,15 +291,16 @@ static bool app_custom_event_callback(void* context, uint32_t event) {
         return true;
     }
     if(event == IR_SCAN_DONE_EVENT && ir_scanning) {
+        ir_scanner_stop(); // Reset internal active flag so next start works
         ir_scanning = false;
         if(ir_scanner_has_signal()) {
             char hash[32];
             ir_scanner_get_hash(hash, sizeof(hash));
-            last_scan_gain = calculate_signal_gain(&player_codex, SIGNAL_IR);
+            last_scan_gain = calculate_signal_gain(&player_codex, hash);
             on_ir_scan(&player_codex, hash);
             last_scan_absorbed = true;
-            if(check_band_gate(&player_codex)) trigger_substrate_unlock();
             save_codex(&player_codex, NULL);
+            if(last_scan_gain >= 3) handle_tier1_scan_success(SIGNAL_IR);
         } else {
             last_scan_gain = -1;
             last_scan_absorbed = false;
@@ -237,15 +308,16 @@ static bool app_custom_event_callback(void* context, uint32_t event) {
         return true;
     }
     if(event == SUBGHZ_SCAN_DONE_EVENT && subghz_scanning) {
+        subghz_scanner_stop(); // Reset internal active flag so next start works
         subghz_scanning = false;
         if(subghz_scanner_has_signal()) {
             char hash[32];
             subghz_scanner_get_hash(hash, sizeof(hash));
-            last_scan_gain = calculate_signal_gain(&player_codex, SIGNAL_SUBGHZ);
+            last_scan_gain = calculate_signal_gain(&player_codex, hash);
             on_subghz_scan(&player_codex, hash);
             last_scan_absorbed = true;
-            if(check_band_gate(&player_codex)) trigger_substrate_unlock();
             save_codex(&player_codex, NULL);
+            if(last_scan_gain >= 3) handle_tier1_scan_success(SIGNAL_SUBGHZ);
         } else {
             last_scan_gain = -1;
             last_scan_absorbed = false;
@@ -253,15 +325,16 @@ static bool app_custom_event_callback(void* context, uint32_t event) {
         return true;
     }
     if(event == NFC_SCAN_DONE_EVENT && nfc_scanning) {
+        nfc_scanner_stop(); // Reset internal active flag so next start works
         nfc_scanning = false;
         if(nfc_scanner_has_signal()) {
             char hash[32];
             nfc_scanner_get_hash(hash, sizeof(hash));
-            last_scan_gain = calculate_signal_gain(&player_codex, SIGNAL_NFC);
+            last_scan_gain = calculate_signal_gain(&player_codex, hash);
             on_nfc_scan(&player_codex, hash);
             last_scan_absorbed = true;
-            if(check_band_gate(&player_codex)) trigger_substrate_unlock();
             save_codex(&player_codex, NULL);
+            if(last_scan_gain >= 3) handle_tier1_scan_success(SIGNAL_NFC);
         } else {
             last_scan_gain = -1;
             last_scan_absorbed = false;
@@ -269,15 +342,16 @@ static bool app_custom_event_callback(void* context, uint32_t event) {
         return true;
     }
     if(event == BT_SCAN_DONE_EVENT && bt_scanning) {
+        bt_scanner_stop(); // Reset internal active flag so next start works
         bt_scanning = false;
         if(bt_scanner_has_signal()) {
             char hash[32];
             bt_scanner_get_hash(hash, sizeof(hash));
-            last_scan_gain = calculate_signal_gain(&player_codex, SIGNAL_BLUETOOTH);
+            last_scan_gain = calculate_signal_gain(&player_codex, hash);
             on_bt_scan(&player_codex, hash);
             last_scan_absorbed = true;
-            if(check_band_gate(&player_codex)) trigger_substrate_unlock();
             save_codex(&player_codex, NULL);
+            if(last_scan_gain >= 3) handle_tier1_scan_success(SIGNAL_BLUETOOTH);
         } else {
             last_scan_gain = -1;
             last_scan_absorbed = false;
@@ -384,6 +458,53 @@ static void codex_view_draw_callback(Canvas* canvas, void* model) {
     }
 }
 
+// ==================== TRANSMISSION VIEW ====================
+static void transmission_draw_callback(Canvas* canvas, void* model) {
+    (void)model;
+    canvas_clear(canvas);
+
+    const char* band_name = get_band_name(band_order[pending_tx_band]);
+    const char** lines = TRANSMISSIONS[pending_tx_band][pending_tx_index];
+
+    // Header
+    canvas_set_font(canvas, FontSecondary);
+    canvas_draw_str(canvas, 2, 8, ">>> TRANSMISSION RECEIVED");
+    canvas_draw_line(canvas, 0, 10, 127, 10);
+
+    // Band label
+    canvas_set_font(canvas, FontPrimary);
+    canvas_draw_str(canvas, 2, 20, band_name);
+
+    // Transmission text — up to 3 lines
+    canvas_set_font(canvas, FontSecondary);
+    int y = 33;
+    for(int i = 0; i < 3; i++) {
+        if(lines[i] == NULL) break;
+        canvas_draw_str(canvas, 2, y, lines[i]);
+        y += 10;
+    }
+
+    // Footer
+    canvas_draw_str(canvas, 2, 63, "OK: Acknowledge");
+}
+
+static bool transmission_input_callback(InputEvent* event, void* context) {
+    (void)context;
+    if(event->type != InputTypeShort) return false;
+    if(event->key == InputKeyOk || event->key == InputKeyBack) {
+        apply_signal_gain(&player_codex, 8); // Transmission acknowledge bonus
+        if(pending_substrate_unlock) {
+            pending_substrate_unlock = false;
+            apply_signal_gain(&player_codex, 30); // Band completion bonus
+            trigger_substrate_unlock();            // CQ Morse → Zero Day
+        }
+        save_codex(&player_codex, NULL);
+        view_dispatcher_switch_to_view(view_dispatcher, VIEW_BAND_DETAIL);
+        return true;
+    }
+    return false;
+}
+
 // ==================== BAND DETAIL VIEW ====================
 static void band_detail_draw_callback(Canvas* canvas, void* model) {
     (void)model;
@@ -412,11 +533,13 @@ static void band_detail_draw_callback(Canvas* canvas, void* model) {
         canvas_draw_str(canvas, 2, 54, "+3  Signal absorbed");
         canvas_draw_str(canvas, 2, 63, "OK: Attune again   Back");
     } else if(last_scan_gain == 1) {
-        canvas_draw_str(canvas, 2, 54, "+1  Heard again");
-        canvas_draw_str(canvas, 2, 63, "OK: Attune again   Back");
+        canvas_draw_str(canvas, 2, 47, "+1  Heard again");
+        canvas_draw_str(canvas, 2, 56, "New Attune or try tomorrow");
+        canvas_draw_str(canvas, 2, 63, "OK: Again   Back");
     } else if(last_scan_gain == 0) {
-        canvas_draw_str(canvas, 2, 54, "Already heard today");
-        canvas_draw_str(canvas, 2, 63, "OK: Attune again   Back");
+        canvas_draw_str(canvas, 2, 47, "Already heard today");
+        canvas_draw_str(canvas, 2, 56, "New Attune or try tomorrow");
+        canvas_draw_str(canvas, 2, 63, "OK: Again   Back");
     } else {
         canvas_draw_str(canvas, 2, 63, "OK: Attune   Back");
     }
@@ -1050,6 +1173,12 @@ int32_t flippe_rpg_app(void* p) {
     view_set_input_callback(band_detail_view, band_detail_input_callback);
     view_dispatcher_add_view(view_dispatcher, VIEW_BAND_DETAIL, band_detail_view);
 
+    // ==================== VIEW 11: TRANSMISSION ====================
+    View* transmission_view = view_alloc();
+    view_set_draw_callback(transmission_view, transmission_draw_callback);
+    view_set_input_callback(transmission_view, transmission_input_callback);
+    view_dispatcher_add_view(view_dispatcher, VIEW_TRANSMISSION, transmission_view);
+
     // ==================== VIEW 3: SHRINE LIST ====================
     View* shrine_view = view_alloc();
     view_set_draw_callback(shrine_view, shrine_view_draw_callback);
@@ -1131,6 +1260,7 @@ int32_t flippe_rpg_app(void* p) {
     view_dispatcher_remove_view(view_dispatcher, VIEW_CODEX);
     view_dispatcher_remove_view(view_dispatcher, VIEW_SIGNAL);
     view_dispatcher_remove_view(view_dispatcher, VIEW_BAND_DETAIL);
+    view_dispatcher_remove_view(view_dispatcher, VIEW_TRANSMISSION);
     view_dispatcher_remove_view(view_dispatcher, VIEW_SHRINE_LIST);
     view_dispatcher_remove_view(view_dispatcher, VIEW_SHRINE_DETAIL);
     view_dispatcher_remove_view(view_dispatcher, VIEW_CAMPFIRE);
@@ -1142,6 +1272,7 @@ int32_t flippe_rpg_app(void* p) {
     view_free(codex_view);
     view_free(signal_view);
     view_free(band_detail_view);
+    view_free(transmission_view);
     view_free(shrine_view);
     view_free(shrine_detail_view);
     view_free(campfire_view);

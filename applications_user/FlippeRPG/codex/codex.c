@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <furi.h>
+#include <furi_hal_rtc.h>
 #include "../narrative/echo_flavor.h"
 #include "../core/constants.h"
 #include "../echo/echo_fusion.h"
@@ -57,13 +58,13 @@ void init_codex(Codex* codex, const char* player_name) {
     memset(codex->shrine_progress, 0, sizeof(codex->shrine_progress));
     memset(codex->techniques, 0, sizeof(codex->techniques));
 
-    // Band gate — RFID visible from the start, all others hidden until earned
+    // Band gate — IR visible from the start, others hidden until earned (Tier 1: IR→SubGHz→NFC→BT)
     memset(codex->band_scans, 0, sizeof(codex->band_scans));
     codex->bands_unlocked   = 1;
     codex->substrate_unlocked = false;
 
     // Timestamp the save
-    codex->save_timestamp = furi_get_tick();
+    codex->save_timestamp = (time_t)furi_hal_rtc_get_timestamp();
 }
 
 // -------------------- SIGNAL LOGGING --------------------
@@ -79,11 +80,12 @@ void log_signal(Codex* codex, const char* signal_hash, int gain, SignalType sign
     // Store new signal at the top (index 0 = newest)
     strncpy(codex->signal_history[0].hash, signal_hash, sizeof(codex->signal_history[0].hash));
     codex->signal_history[0].gain = gain;
-    codex->signal_history[0].timestamp = furi_get_tick();
+    codex->signal_history[0].timestamp = (time_t)furi_hal_rtc_get_timestamp();
     codex->signal_history[0].signal_type = signal_type;
 
-    // Count this scan toward the band gate (every scan counts, regardless of gain)
-    if(signal_type != SIGNAL_UNKNOWN) {
+    // Count this scan toward the band gate only on first-of-type-today (+3 gain).
+    // Repeated scans still award signal score but don't advance the gate.
+    if(signal_type != SIGNAL_UNKNOWN && gain >= 3) {
         codex->band_scans[(int)signal_type]++;
     }
 
@@ -261,14 +263,16 @@ bool check_band_gate(Codex* codex) {
     if(new_unlocked > NUM_BANDS) new_unlocked = NUM_BANDS;
     codex->bands_unlocked = new_unlocked;
 
-    // Substrate unlocks when all six bands are complete
+    // Substrate unlocks when all Tier 1 bands (band_order[0..NUM_BANDS-1]) are complete
     if(!codex->substrate_unlocked) {
-        if(codex->band_scans[(int)SIGNAL_RFID]      >= SCANS_PER_BAND &&
-           codex->band_scans[(int)SIGNAL_RF]        >= SCANS_PER_BAND &&
-           codex->band_scans[(int)SIGNAL_IR]        >= SCANS_PER_BAND &&
-           codex->band_scans[(int)SIGNAL_SUBGHZ]    >= SCANS_PER_BAND &&
-           codex->band_scans[(int)SIGNAL_NFC]       >= SCANS_PER_BAND &&
-           codex->band_scans[(int)SIGNAL_BLUETOOTH] >= SCANS_PER_BAND) {
+        bool all_done = true;
+        for(int i = 0; i < NUM_BANDS; i++) {
+            if(codex->band_scans[(int)band_order[i]] < SCANS_PER_BAND) {
+                all_done = false;
+                break;
+            }
+        }
+        if(all_done) {
             codex->substrate_unlocked  = true;
             codex->zero_day_confirmed  = true;
             codex->zero_day_date       = furi_get_tick();
