@@ -12,7 +12,7 @@ void share_signal(Codex* codex, SignalType type, const char* signal_hash) {
 
 void receive_signal(Codex* codex, SignalType type, const char* signal_hash) {
     printf("[Signal] Received signal (%s) via %d\n", signal_hash, type);
-    int gain = calculate_signal_gain(codex, type);
+    int gain = calculate_signal_gain(codex, signal_hash);
     log_signal(codex, signal_hash, gain, type);
 
     // Ambient aura feedback

@@ -6,7 +6,9 @@
 #include "../codex/codex.h"
 
 char* hash_signal(const char* raw_data);
-int calculate_signal_gain(Codex* codex, SignalType type);
+// Gain is per unique hash per day: +3 first time, +1 second, 0 third+.
+// Different physical devices produce different hashes — each gets its own gate.
+int calculate_signal_gain(Codex* codex, const char* hash);
 SignalType get_signal_type(Codex* codex, const char* signal_hash);
 int enter_manual_signal(Codex* codex, const char* signal_hash);
 void on_rfid_scan(Codex* codex, const char* tag_id);

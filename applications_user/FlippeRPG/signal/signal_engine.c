@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <furi.h>
+#include <furi_hal_rtc.h>
 #include <applications/services/dolphin/dolphin.h>
 #include "../shrine/shrine.h"
 #include "../codex/codex.h"
@@ -19,63 +20,61 @@ char* hash_signal(const char* raw_data) {
     return hash;
 }
 
-// Returns the signal gain for logging a new signal of the given type.
-// Counts how many times this type has been logged in the last 24 hours
-// using the existing signal_history. This is the per-type-per-day anti-farming gate:
-//   First scan of this type today  → +3
-//   Second scan of this type today → +1
-//   Third+ scan of this type today → +0
-int calculate_signal_gain(Codex* codex, SignalType type) {
-    int type_count = 0;
-    uint32_t now = furi_get_tick();
-    // Flipper ticks are milliseconds
-    uint32_t ms_per_day = 24u * 60u * 60u * 1000u;
+// Returns the signal gain for a specific hash.
+// Counts how many times this exact hash has been logged in the last 24 hours.
+// Different physical devices produce different hashes — each gets its own gate:
+//   First scan of this device today  → +3 (advances band gate)
+//   Second scan of this device today → +1
+//   Third+ scan of this device today → +0
+int calculate_signal_gain(Codex* codex, const char* hash) {
+    int hash_count = 0;
+    uint32_t now = furi_hal_rtc_get_timestamp(); // Survives reboots — real wall-clock time
+    uint32_t seconds_per_day = 24u * 60u * 60u;
 
     for(int i = 0; i < MAX_SIGNALS; i++) {
         if(codex->signal_history[i].hash[0] == '\0') continue;
-        if(codex->signal_history[i].signal_type != type) continue;
-        uint32_t age = now - codex->signal_history[i].timestamp;
-        if(age < ms_per_day) type_count++;
+        if(strcmp(codex->signal_history[i].hash, hash) != 0) continue;
+        uint32_t age = now - (uint32_t)codex->signal_history[i].timestamp;
+        if(age < seconds_per_day) hash_count++;
     }
 
-    if(type_count == 0) return 3;
-    if(type_count == 1) return 1;
+    if(hash_count == 0) return 3;
+    if(hash_count == 1) return 1;
     return 0;
 }
 
 // Handles RFID scans — routes through the same gain gate as all other bands.
 // tag_id is used directly as the hash (125kHz RFID UIDs are persistent and unique).
 void on_rfid_scan(Codex* codex, const char* tag_id) {
-    int gain = calculate_signal_gain(codex, SIGNAL_RFID);
+    int gain = calculate_signal_gain(codex, tag_id);
     log_signal(codex, tag_id, gain, SIGNAL_RFID);
     dolphin_deed(DolphinDeedRfidRead);
 }
 
 // Handles raw RF scans — hash is RSSI-derived (ephemeral by design; RF has no UID).
 void on_rf_scan(Codex* codex, const char* signal_hash) {
-    int gain = calculate_signal_gain(codex, SIGNAL_RF);
+    int gain = calculate_signal_gain(codex, signal_hash);
     log_signal(codex, signal_hash, gain, SIGNAL_RF);
     dolphin_deed(DolphinDeedSubGhzFrequencyAnalyzer);
 }
 
-// Handles IR scans — hash is "PROTO:ADDR:CMD", deterministic for the same source.
+// Handles IR scans — hash is "PROTO:ADDR:CMD" or "RAW:count:checksum" for unknown protocols.
 void on_ir_scan(Codex* codex, const char* signal_hash) {
-    int gain = calculate_signal_gain(codex, SIGNAL_IR);
+    int gain = calculate_signal_gain(codex, signal_hash);
     log_signal(codex, signal_hash, gain, SIGNAL_IR);
     dolphin_deed(DolphinDeedIrLearnSuccess);
 }
 
 // Handles Sub-GHz scans — hash is "PROTO:HASH_BYTE" from the decoded protocol frame.
 void on_subghz_scan(Codex* codex, const char* signal_hash) {
-    int gain = calculate_signal_gain(codex, SIGNAL_SUBGHZ);
+    int gain = calculate_signal_gain(codex, signal_hash);
     log_signal(codex, signal_hash, gain, SIGNAL_SUBGHZ);
     dolphin_deed(DolphinDeedSubGhzReceiverInfo);
 }
 
-// Handles NFC scans — routes through the same gain gate as all other bands.
-// tag_id is used directly as the hash (NFC UIDs are persistent and unique).
+// Handles NFC scans — tag_id is the UID (persistent and unique per card).
 void on_nfc_scan(Codex* codex, const char* tag_id) {
-    int gain = calculate_signal_gain(codex, SIGNAL_NFC);
+    int gain = calculate_signal_gain(codex, tag_id);
     log_signal(codex, tag_id, gain, SIGNAL_NFC);
     dolphin_deed(DolphinDeedNfcRead);
 }
@@ -83,7 +82,7 @@ void on_nfc_scan(Codex* codex, const char* tag_id) {
 // Handles BT scans — hash is RSSI-derived + tick (ephemeral; passive listening has no UID).
 // The Unanswered Hello: something was broadcasting. We heard it.
 void on_bt_scan(Codex* codex, const char* signal_hash) {
-    int gain = calculate_signal_gain(codex, SIGNAL_BLUETOOTH);
+    int gain = calculate_signal_gain(codex, signal_hash);
     log_signal(codex, signal_hash, gain, SIGNAL_BLUETOOTH);
     dolphin_deed(DolphinDeedPluginGameWin);
 }
@@ -102,7 +101,7 @@ SignalType get_signal_type(Codex* codex, const char* signal_hash) {
 int scan_band(Codex* codex, SignalType band_type) {
     char hash[16];
     snprintf(hash, sizeof(hash), "SIG%04X", (unsigned)(rand() % 65536));
-    int gain = calculate_signal_gain(codex, band_type);
+    int gain = calculate_signal_gain(codex, hash);
     log_signal(codex, hash, gain, band_type);
     return gain;
 }
@@ -110,7 +109,7 @@ int scan_band(Codex* codex, SignalType band_type) {
 int enter_manual_signal(Codex* codex, const char* signal_hash) {
     // Manual entries: same type-per-day gate, but capped lower
     // Auto: 3/1/0 → Manual: 1/0/0
-    int gain = calculate_signal_gain(codex, SIGNAL_UNKNOWN);
+    int gain = calculate_signal_gain(codex, signal_hash);
     if(gain >= 3) gain = 1;
     else gain = 0;
 
