@@ -13,8 +13,8 @@
 
 // 433.92 MHz — most common ISM band for OOK remotes worldwide
 #define SUBGHZ_SCAN_FREQUENCY  433920000
-// 4-second window — enough time to press a garage door remote once
-#define SUBGHZ_SCAN_TIMEOUT_MS 4000
+// 8-second window — matches IR scanner window
+#define SUBGHZ_SCAN_TIMEOUT_MS 8000
 #define SUBGHZ_POLL_INTERVAL_MS 50
 
 static volatile bool sg_active    = false;
@@ -77,6 +77,7 @@ static int32_t sg_scan_thread(void* context) {
 
     if(device && subghz_devices_begin(device)) {
         subghz_devices_reset(device);
+        furi_delay_ms(50); // Let hardware settle after reset
         subghz_devices_load_preset(device, FuriHalSubGhzPresetOok650Async, NULL);
         subghz_devices_set_frequency(device, SUBGHZ_SCAN_FREQUENCY);
 
@@ -126,7 +127,7 @@ void subghz_scanner_start(ViewDispatcher* dispatcher) {
     sg_last_hash[0] = '\0';
     sg_active      = true;
 
-    sg_thread = furi_thread_alloc_ex("SGScanThread", 2048, sg_scan_thread, NULL);
+    sg_thread = furi_thread_alloc_ex("SGScanThread", 4096, sg_scan_thread, NULL);
     furi_thread_start(sg_thread);
 }
 
