@@ -5,6 +5,8 @@ apps = [
         apptype=FlipperAppType.EXTERNAL,
         entry_point="flippe_rpg_app",
         stack_size=8192,
+        # tests/ holds host-side tests (tests/host/run.sh) — never part of the .fap
+        sources=["*.c*", "!tests"],
         fap_category="User",
     )
 ]
