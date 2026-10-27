@@ -40,7 +40,6 @@ static SignalType aura_native_signal(const char* aura_trait) {
     if(strncmp(aura_trait, "Clearseeing",  16) == 0) return SIGNAL_IR;
     if(strncmp(aura_trait, "Touchmarked",  16) == 0) return SIGNAL_NFC;
     if(strncmp(aura_trait, "Heard",        16) == 0) return SIGNAL_BLUETOOTH;
-    if(strncmp(aura_trait, "Grounded",     16) == 0) return SIGNAL_RF;
     return SIGNAL_UNKNOWN;
 }
 
@@ -55,6 +54,7 @@ static SignalType determine_ground_truth(const Codex* codex) {
         const SignalEntry* entry = &codex->signal_history[i];
         if(entry->hash[0] == '\0') continue;
         SignalType t = entry->signal_type;
+        if(t == SIGNAL_RF) t = SIGNAL_SUBGHZ; // RF merged into Sub-GHz; old saves may still hold RF scans
         if(t < SIGNAL_UNKNOWN) counts[t]++;
     }
 
@@ -71,6 +71,7 @@ static SignalType determine_ground_truth(const Codex* codex) {
         // No scan history — random ground truth
         dominant = (SignalType)(furi_get_tick() % SIGNAL_UNKNOWN);
     }
+    if(dominant == SIGNAL_RF) dominant = SIGNAL_SUBGHZ;
 
     return dominant;
 }
@@ -86,7 +87,7 @@ static void build_options(DuelState* duel, const Codex* codex) {
     SignalType pool[SIGNAL_UNKNOWN - 1];
     int pool_size = 0;
     for(int t = 0; t < (int)SIGNAL_UNKNOWN; t++) {
-        if((SignalType)t != duel->ground_truth) {
+        if((SignalType)t != duel->ground_truth && (SignalType)t != SIGNAL_RF) {
             pool[pool_size++] = (SignalType)t;
         }
     }
@@ -152,8 +153,7 @@ DuelResult duel_resolve(DuelState* duel, Codex* codex) {
         record_duel_result(codex, true);
     } else {
         duel->result = DUEL_RESULT_LOSS;
-        codex->stamina -= DUEL_STAMINA_LOSS;
-        if(codex->stamina < 0) codex->stamina = 0;
+        codex_drain_stamina(codex, DUEL_STAMINA_LOSS);
         record_duel_result(codex, false);
     }
 
@@ -165,8 +165,7 @@ void duel_timeout(DuelState* duel, Codex* codex) {
     if(duel->phase != DUEL_PHASE_CHOOSING) return;
 
     duel->result = DUEL_RESULT_TIMEOUT;
-    codex->stamina -= DUEL_STAMINA_LOSS;
-    if(codex->stamina < 0) codex->stamina = 0;
+    codex_drain_stamina(codex, DUEL_STAMINA_LOSS);
     record_duel_result(codex, false);
 
     duel->phase = DUEL_PHASE_RESULT;

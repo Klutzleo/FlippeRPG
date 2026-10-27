@@ -6,7 +6,7 @@
 
 #define AURA_CLEARSEEING  "Clearseeing"
 #define AURA_TOUCHMARKED  "Touchmarked"
-#define AURA_GROUNDED     "Grounded"
+#define AURA_LEGIBLE      "Legible"
 #define AURA_STORMTOUCHED "Stormtouched"
 #define AURA_HEARD        "Heard"
 #define AURA_UNKNOWN      "Unknown"
@@ -43,17 +43,17 @@ void attempt_shrine(Codex* codex, ShrineID shrine_id, bool ritual_success) {
 
 // Maps each shrine to the signal type required to activate it
 static const SignalType shrine_requirements[NUM_SHRINES] = {
+    [SHRINE_POCKET_CARRIED]    = SIGNAL_RFID,
     [SHRINE_CAVE_THAT_LISTENS] = SIGNAL_SUBGHZ,
     [SHRINE_FLAME_REACH]       = SIGNAL_IR,
     [SHRINE_BIND_WHISPER]      = SIGNAL_NFC,
     [SHRINE_THREAD_TOUCH]      = SIGNAL_BLUETOOTH,
-    [SHRINE_ECHO_TOUCHED]      = SIGNAL_RF,
     [SHRINE_UNKNOWN]           = SIGNAL_UNKNOWN,
 };
 
 // Triggers a shrine ritual — only succeeds if the signal type matches the shrine's requirement
 void trigger_shrine(Codex* codex, ShrineID shrine_id, SignalType signal_type) {
-    if(shrine_id >= NUM_SHRINES) return;
+    if(!shrine_is_active(shrine_id)) return;
     bool correct_signal = (signal_type == shrine_requirements[shrine_id]);
     attempt_shrine(codex, shrine_id, correct_signal);
 }
@@ -94,9 +94,9 @@ void complete_shrine(Codex* codex, ShrineID shrine_id) {
 void assign_aura(Codex* codex, ShrineID shrine_id) {
     const char* aura = NULL;
     switch (shrine_id) {
+        case SHRINE_POCKET_CARRIED:    aura = AURA_LEGIBLE;      break;
         case SHRINE_FLAME_REACH:       aura = AURA_CLEARSEEING;  break;
         case SHRINE_BIND_WHISPER:      aura = AURA_TOUCHMARKED;  break;
-        case SHRINE_ECHO_TOUCHED:      aura = AURA_GROUNDED;     break;
         case SHRINE_CAVE_THAT_LISTENS: aura = AURA_STORMTOUCHED; break;
         case SHRINE_THREAD_TOUCH:      aura = AURA_HEARD;        break;
         default:                       aura = AURA_UNKNOWN;      break;

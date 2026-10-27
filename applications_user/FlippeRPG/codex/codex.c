@@ -30,6 +30,9 @@ void apply_signal_gain(Codex* codex, int amount) {
 // -------------------- INITIALIZATION --------------------
 
 void init_codex(Codex* codex, const char* player_name) {
+    // Start from a clean struct so nothing from a failed load leaks into a new player
+    memset(codex, 0, sizeof(Codex));
+
     // Seed RNG once at init for random flavor text
     srand(furi_get_tick());
 
@@ -63,14 +66,17 @@ void init_codex(Codex* codex, const char* player_name) {
     codex->bands_unlocked   = 1;
     codex->substrate_unlocked = false;
 
-    // Timestamp the save
+    // Timestamp the save and start the daily clocks
     codex->save_timestamp = (time_t)furi_hal_rtc_get_timestamp();
+    codex->last_active_day = codex_today();
+    codex->stamina_updated = furi_hal_rtc_get_timestamp();
 }
 
 // -------------------- SIGNAL LOGGING --------------------
 
-// Logs a scanned signal and applies the signal strength gain.
-// gain is +3 (first of type today), +1 (second), or 0 (third+).
+// Logs a counted scan, advances the band gate, and applies the signal gain.
+// Uncounted scans (same source again today, too soon, daily max) are never logged.
+// gain is +3 (first counted scan of the type today), +1 (second), or 0 (third+).
 void log_signal(Codex* codex, const char* signal_hash, int gain, SignalType signal_type) {
     // Shift signal history to make room for new entry
     for(int i = MAX_SIGNALS - 1; i > 0; i--) {
@@ -83,19 +89,19 @@ void log_signal(Codex* codex, const char* signal_hash, int gain, SignalType sign
     codex->signal_history[0].timestamp = (time_t)furi_hal_rtc_get_timestamp();
     codex->signal_history[0].signal_type = signal_type;
 
-    // Count this scan toward the band gate only on first-of-type-today (+3 gain).
-    // Repeated scans still award signal score but don't advance the gate.
-    if(signal_type != SIGNAL_UNKNOWN && gain >= 3) {
+    // Every counted scan advances the gate until the band is full. Scans past that still
+    // earn signal but add no more transmissions.
+    if(signal_type != SIGNAL_UNKNOWN && codex->band_scans[(int)signal_type] < SCANS_PER_BAND) {
         codex->band_scans[(int)signal_type]++;
+
+        if(codex->band_scans[(int)signal_type] == SCANS_PER_BAND) {
+            for(int i = 0; i < NUM_BANDS; i++) {
+                if(band_order[i] == signal_type) codex->band_complete_day[i] = codex_today();
+            }
+        }
     }
 
-    // Apply signal strength gain
     if(gain > 0) apply_signal_gain(codex, gain);
-
-    // Echo mechanics hook
-    bool fusion_success = (gain >= 3);
-    bool corruption_detected = (gain == 0);
-    process_echo(codex, fusion_success, corruption_detected);
 }
 
 // -------------------- DUEL RESULTS --------------------
@@ -197,8 +203,9 @@ bool ready_for_convergence(Codex* codex) {
     // Require DEEP or higher signal strength (not just duel count)
     if(codex->signal_strength_level < SIGNAL_STRENGTH_DEEP) return false;
 
-    for(int i = 0; i < MAX_SHRINES; i++) {
-        if(!codex->shrine_progress[i].completed) return false;
+    // Only the real shrines count — the rest of the MAX_SHRINES slots are spare
+    for(int i = 0; i < SHRINE_UNKNOWN; i++) {
+        if(shrine_is_active(i) && !codex->shrine_progress[i].completed) return false;
     }
 
     for(int i = 0; i < MAX_ECHO_LOG; i++) {
@@ -247,21 +254,32 @@ void process_echo(Codex* codex, bool fusion_success, bool corruption_detected) {
 
 // -------------------- BAND GATE --------------------
 
-// Recalculates how many bands are unlocked and checks if The Substrate just opened.
-// Call after every scan. Returns true exactly once — when substrate_unlocked flips to true.
-bool check_band_gate(Codex* codex) {
-    // Sequential unlock: band i+1 opens only after band i reaches SCANS_PER_BAND.
-    // bands_unlocked starts at 1 (RFID always visible). Walk forward until a band is incomplete.
-    int new_unlocked = 1;
+// RTC date as a day number. Counters reset when it changes (midnight on the Flipper's clock).
+uint32_t codex_today(void) {
+    return furi_hal_rtc_get_timestamp() / SECONDS_PER_DAY;
+}
+
+// Sequential unlock: band i+1 opens once band i has SCANS_PER_BAND counted scans — and, with
+// BAND_DAY_GATE, only on a later day than the one band i completed.
+// Bands are hidden until they open, so a waiting band simply isn't there yet.
+void codex_refresh_bands(Codex* codex) {
+    uint32_t today = codex_today();
+    int unlocked = 1; // The first band is always visible
     for(int i = 0; i < NUM_BANDS - 1; i++) {
-        if(codex->band_scans[(int)band_order[i]] >= SCANS_PER_BAND) {
-            new_unlocked = i + 2;
-        } else {
-            break; // Sequential — stop at first incomplete band
-        }
+        if(codex->band_scans[(int)band_order[i]] < SCANS_PER_BAND) break;
+#if BAND_DAY_GATE
+        // 0 = completed before the day was tracked; don't hold those players back
+        if(codex->band_complete_day[i] != 0 && today <= codex->band_complete_day[i]) break;
+#endif
+        unlocked = i + 2;
     }
-    if(new_unlocked > NUM_BANDS) new_unlocked = NUM_BANDS;
-    codex->bands_unlocked = new_unlocked;
+    codex->bands_unlocked = unlocked;
+}
+
+// Refreshes the visible bands and checks if The Substrate just opened.
+// Call after every counted scan. Returns true exactly once — when substrate_unlocked flips to true.
+bool check_band_gate(Codex* codex) {
+    codex_refresh_bands(codex);
 
     // Substrate unlocks when all Tier 1 bands (band_order[0..NUM_BANDS-1]) are complete
     if(!codex->substrate_unlocked) {
@@ -275,9 +293,51 @@ bool check_band_gate(Codex* codex) {
         if(all_done) {
             codex->substrate_unlocked  = true;
             codex->zero_day_confirmed  = true;
-            codex->zero_day_date       = furi_get_tick();
+            codex->zero_day_date       = (time_t)furi_hal_rtc_get_timestamp();
             return true; // Caller fires CQ Morse — the only haptic in the game
         }
     }
     return false;
+}
+
+// -------------------- TIME PASSAGE --------------------
+
+// Credits the stamina earned since stamina_updated. Stamina is full → the clock just restarts.
+static void recover_stamina(Codex* codex, uint32_t now) {
+    if(codex->stamina >= STAMINA_MAX || codex->stamina_updated == 0 || now < codex->stamina_updated) {
+        if(codex->stamina > STAMINA_MAX) codex->stamina = STAMINA_MAX;
+        codex->stamina_updated = now;
+        return;
+    }
+    uint32_t points = (now - codex->stamina_updated) / STAMINA_RECOVERY_SECONDS_PER_POINT;
+    if(points == 0) return;
+    if(points > STAMINA_MAX) points = STAMINA_MAX;
+    codex->stamina += (int)points;
+    if(codex->stamina >= STAMINA_MAX) {
+        codex->stamina = STAMINA_MAX;
+        codex->stamina_updated = now;
+    } else {
+        codex->stamina_updated += points * STAMINA_RECOVERY_SECONDS_PER_POINT;
+    }
+}
+
+void codex_apply_time_passage(Codex* codex) {
+    uint32_t now = furi_hal_rtc_get_timestamp();
+    uint32_t today = now / SECONDS_PER_DAY;
+
+    recover_stamina(codex, now);
+
+    // Absence: -1 signal per whole day with no launch. The Substrate gets quieter.
+    if(codex->last_active_day != 0 && today > codex->last_active_day + 1) {
+        uint32_t idle_days = today - codex->last_active_day - 1;
+        if(idle_days > ABSENCE_DECAY_MAX_DAYS) idle_days = ABSENCE_DECAY_MAX_DAYS;
+        apply_signal_gain(codex, -(int)idle_days);
+    }
+    codex->last_active_day = today;
+}
+
+void codex_drain_stamina(Codex* codex, int amount) {
+    recover_stamina(codex, furi_hal_rtc_get_timestamp());
+    codex->stamina -= amount;
+    if(codex->stamina < 0) codex->stamina = 0;
 }
