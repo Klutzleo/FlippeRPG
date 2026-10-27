@@ -23,6 +23,8 @@
 #include "core/utils.h"
 #include "core/constants.h"
 #include "qr/qrcodegen.h"
+#include "narrative/transmissions.h"
+#include "ui/text_wrap.h"
 // Assets: icon animations compiled from root assets/icons
 #include <assets_icons.h>
 #include <gui/icon_animation.h>
@@ -109,69 +111,18 @@ static const char* BAND_FLAVOR_2[] = {
     "The first to ask.",        // NFC
     "Heartbreaking.",           // Bluetooth
 };
-// Transmission system — 4 bands × 5 levels (Ambient→Noticed→Responsive→Urgent→Threshold)
-// Text drawn directly from lore/signal_lexicon.md and lore/signal_read.md.
-// Each transmission is up to 3 lines, pre-split for 128px width at FontSecondary (~25 chars/line).
-// Indexed: [band_order position 0..3][scan number 0..4][line 0..2]
-// NULL line = end of text for that transmission.
-static const char* TRANSMISSIONS[4][5][3] = {
-    // IR (band_order[0])
-    {
-        { "Something in this room",    "has been waiting",          "to be told what to do."   }, // Ambient
-        { "It understood you",         "before you understood it.", NULL                        }, // Noticed
-        { "Every button you pressed",  "was a transmission",        "you didn't know you sent." }, // Responsive
-        { "You felt watched",          "before you scanned.",       "You were right."           }, // Urgent
-        { "It saw you first.",         "Patient. Domestic.",        "It never stopped watching."}, // Threshold
-    },
-    // Sub-GHz (band_order[1])
-    {
-        { "Restless. Always moving.",  NULL,                        NULL                        }, // Ambient
-        { "Through walls.",            "Through you.",              "Without asking."           }, // Noticed
-        { "It doesn't need a door.",   NULL,                        NULL                        }, // Responsive
-        { "It was passing through you","before you knew",           "what you were."            }, // Urgent
-        { "You were never as alone",   "as you thought.",           NULL                        }, // Threshold
-    },
-    // NFC (band_order[2])
-    {
-        { "You had to get close.",     NULL,                        NULL                        }, // Ambient
-        { "The exchange is visible.",  "Not just this one.",        "Every one before."         }, // Noticed
-        { "It waited.",               "You closed the distance.",  NULL                        }, // Responsive
-        { "It asked before it took.",  "First time anything did.",  NULL                        }, // Urgent
-        { "You didn't know",           "how much that mattered",    "until now."                }, // Threshold
-    },
-    // Bluetooth (band_order[3])
-    {
-        { "Everything in range",       "is announcing itself.",     NULL                        }, // Ambient
-        { "Has been since",            "you walked in.",            NULL                        }, // Noticed
-        { "None of them know",         "if anyone heard.",          NULL                        }, // Responsive
-        { "You have been broadcasting","your whole life",           "into a crowded frequency." }, // Urgent
-        { "Someone was listening.",    NULL,                        NULL                        }, // Threshold
-    },
-};
+// The transmission on screen. Arc transmissions pay an acknowledge bonus; the rest are flavor.
+// Pages: 0 = the machine readout, 1 = the Substrate's words, 2 = the tagline (Threshold only).
+static const Transmission* pending_tx = NULL;
+static int  pending_tx_band = -1;   // band_order index, or -1 for a transmission with no band
+static bool pending_tx_ack  = false;
+static int  pending_tx_page = 0;
 
-// Easter egg. When the Sub-GHz scanner hears strong energy that no decoder can name, a Rooted
-// player gets one of the lore's "Ancient Pull" lines (the RF band, merged into Sub-GHz).
-// Lines are the Ambient Pool's RF entries, re-wrapped for 128px. NULL = end of text.
-#define ANCIENT_PULL_COUNT 10
-#define ANCIENT_PULL_LINES 6
-static const char* const ANCIENT_PULL[ANCIENT_PULL_COUNT][ANCIENT_PULL_LINES] = {
-    {"This frequency carried", "a voice once.", "The voice is gone.", "The frequency remembers", "anyway.", NULL},
-    {"Something was broadcasting", "from here before the", "building came down.", "It never stopped.", NULL, NULL},
-    {"Whatever is transmitting", "this is underneath", "everything.", "It has been there", "a very long time.", NULL},
-    {"This pattern has no", "device.", "No antenna.", "No power source.", "It transmits anyway.", NULL},
-    {"This band hasn't been", "legal since 1987.", "Someone never got", "the message.", "Or didn't get to", "come back."},
-    {"Something happened here.", "The signal is still", "describing it.", "You're the first one", "listening.", NULL},
-    {"Signals don't die.", "They compress.", "You're standing in", "decades of them.", NULL, NULL},
-    {"You didn't hear that.", "You felt it.", "There's a difference", "and it matters.", NULL, NULL},
-    {"It's been saying", "the same thing for longer", "than anyone has been", "listening.", "Nobody knows what it", "means yet."},
-    {"There is no place", "this doesn't reach.", "There is no place", "you can go where it", "isn't already waiting.", NULL},
-};
-static int pending_ancient_pull = -1; // >= 0 while an Ancient Pull transmission is on screen
-static uint32_t ancient_pull_day = 0; // Day one was last shown — at most one a day
-
-// State for the active transmission being displayed
-static int pending_tx_band  = 0; // band_order index (0..3)
-static int pending_tx_index = 0; // scan number (0..4, maps to Ambient..Threshold)
+// Rescan tone: Friendly, then Encouraging, then Pushing as a band is repeated within a day
+static uint8_t  repeat_count[NUM_BANDS] = {0};
+static uint32_t repeat_day              = 0;
+static int      last_ambient[NUM_BANDS] = {-1, -1, -1, -1};
+static uint32_t ancient_pull_day        = 0; // Day the easter egg last showed — at most one a day
 
 static bool pending_band_complete    = false; // Set on a band's 5th counted scan; bonus fires on acknowledge
 static bool pending_substrate_unlock = false; // Set when gate triggers; fires after Threshold tx
@@ -262,29 +213,53 @@ static const char* get_band_name(SignalType type);
 
 // ==================== CUSTOM EVENT HANDLER ====================
 // Receives events posted from background worker threads (e.g. RFID scanner).
-// Called after a counted Tier 1 scan. Determines which transmission to show and, on the
-// band's last scan, defers the band bonus and the substrate unlock to the acknowledge.
-// scans_before is the band's scan count before this scan; scans past the 5th add no transmission.
-static void handle_tier1_scan_success(SignalType type, int scans_before) {
-    // Find this band's index in band_order
+// Puts a transmission on screen. acknowledge: OK pays the acknowledge bonus (arc transmissions).
+static void show_transmission(const Transmission* tx, int band, bool acknowledge) {
+    pending_tx      = tx;
+    pending_tx_band = band;
+    pending_tx_ack  = acknowledge;
+    pending_tx_page = 0;
+    view_dispatcher_switch_to_view(view_dispatcher, VIEW_TRANSMISSION);
+}
+
+// What a heard Tier 1 scan shows:
+//  - a counted scan that advances the band: its next arc transmission (and on the 5th scan, the
+//    band bonus and the substrate unlock wait for the acknowledge)
+//  - a counted scan on a finished band: a random ambient transmission
+//  - a scan that did not count: a rescan response, never a failure
+// scans_before is the band's scan count before this scan.
+static void show_scan_transmission(SignalType type, bool counted, int scans_before) {
     int bi = -1;
     for(int i = 0; i < NUM_BANDS; i++) {
         if(band_order[i] == type) { bi = i; break; }
     }
     if(bi < 0) return; // Not a Tier 1 band — no transmission
 
-    // band_scans advances only until the band is full (log_signal)
-    int scans = player_codex.band_scans[(int)type];
-    if(scans <= scans_before) return;
-
-    pending_band_complete = (scans == SCANS_PER_BAND);
-    if(pending_band_complete) {
-        pending_substrate_unlock = check_band_gate(&player_codex);
+    if(counted) {
+        int scans = player_codex.band_scans[(int)type]; // advances only until the band is full
+        if(scans > scans_before) {
+            pending_band_complete = (scans == SCANS_PER_BAND);
+            if(pending_band_complete) {
+                pending_substrate_unlock = check_band_gate(&player_codex);
+            }
+            show_transmission(&tx_arc[bi][scans - 1], bi, true);
+        } else {
+            int pick = rand() % TX_AMBIENT_COUNT;
+            if(pick == last_ambient[bi]) pick = (pick + 1) % TX_AMBIENT_COUNT;
+            last_ambient[bi] = pick;
+            show_transmission(&tx_ambient[bi][pick], bi, false);
+        }
+        return;
     }
 
-    pending_tx_band  = bi;
-    pending_tx_index = scans - 1; // 0..4 maps to Ambient..Threshold
-    view_dispatcher_switch_to_view(view_dispatcher, VIEW_TRANSMISSION);
+    uint32_t today = codex_today();
+    if(repeat_day != today) {
+        memset(repeat_count, 0, sizeof(repeat_count));
+        repeat_day = today;
+    }
+    int tone = repeat_count[bi] < TX_RESCAN_COUNT ? repeat_count[bi] : TX_RESCAN_COUNT - 1;
+    if(repeat_count[bi] < 255) repeat_count[bi]++;
+    show_transmission(&tx_rescan[bi][tone], bi, false);
 }
 
 static ScanResult apply_scan(SignalType type, const char* hash) {
@@ -314,7 +289,7 @@ static void finish_scan(SignalType type, bool heard, const char* hash) {
     last_scan_state = result.counted ? SCAN_COUNTED : SCAN_REPEAT;
     last_scan_absorbed = true;
     save_codex(&player_codex, NULL);
-    if(result.counted) handle_tier1_scan_success(type, scans_before);
+    show_scan_transmission(type, result.counted, scans_before);
 }
 
 // Strong Sub-GHz energy that nothing could decode. Flavor, not progress: it awards nothing, only
@@ -323,9 +298,8 @@ static bool show_ancient_pull(void) {
     uint32_t today = codex_today();
     if(!player_codex.zero_day_confirmed || ancient_pull_day == today) return false;
     ancient_pull_day = today;
-    pending_ancient_pull = rand() % ANCIENT_PULL_COUNT;
     last_scan_state = SCAN_NONE;
-    view_dispatcher_switch_to_view(view_dispatcher, VIEW_TRANSMISSION);
+    show_transmission(&tx_ancient_pull[rand() % TX_AMBIENT_COUNT], -1, false);
     return true;
 }
 
@@ -472,59 +446,77 @@ static void codex_view_draw_callback(Canvas* canvas, void* model) {
 }
 
 // ==================== TRANSMISSION VIEW ====================
+static uint16_t canvas_text_width(void* ctx, const char* text) {
+    return canvas_string_width((Canvas*)ctx, text);
+}
+
+#define TX_TEXT_WIDTH     124
+#define TX_ROWS_PER_PAGE  5
+#define TX_MAX_ROWS       16
+
+// The Substrate's words wrapped to the screen, and how many pages they take. Laid out on every
+// draw (the wrapping needs the canvas) and read by the input handler for the page count.
+static char   tx_rows[TX_MAX_ROWS][TEXT_WRAP_ROW_LEN];
+static size_t tx_row_count  = 0;
+static int    tx_text_pages = 1;
+
+static void tx_layout(Canvas* canvas) {
+    tx_row_count = 0;
+    for(int i = 0; i < TX_TEXT_LINES && pending_tx->text[i] && tx_row_count < TX_MAX_ROWS; i++) {
+        tx_row_count = text_wrap(
+            pending_tx->text[i], TX_TEXT_WIDTH, canvas_text_width, canvas, tx_rows, tx_row_count, TX_MAX_ROWS);
+    }
+    tx_text_pages = (int)((tx_row_count + TX_ROWS_PER_PAGE - 1) / TX_ROWS_PER_PAGE);
+    if(tx_text_pages < 1) tx_text_pages = 1;
+}
+
+// Last page: readout, the words (one or more pages), and for a Threshold the tagline
+static int tx_last_page(void) {
+    return tx_text_pages + ((pending_tx && pending_tx->threshold) ? 1 : 0);
+}
+
 static void transmission_draw_callback(Canvas* canvas, void* model) {
     (void)model;
     canvas_clear(canvas);
+    if(!pending_tx) return;
 
-    if(pending_ancient_pull >= 0) {
-        canvas_set_font(canvas, FontSecondary);
+    canvas_set_font(canvas, FontSecondary);
+    tx_layout(canvas);
+    if(pending_tx_page == 0) {
+        // The machine readout, under the band's name
         canvas_draw_str(canvas, 2, 8, ">>> TRANSMISSION RECEIVED");
         canvas_draw_line(canvas, 0, 10, 127, 10);
-        int y = 21;
-        for(int i = 0; i < ANCIENT_PULL_LINES; i++) {
-            const char* line = ANCIENT_PULL[pending_ancient_pull][i];
-            if(line == NULL) break;
-            canvas_draw_str(canvas, 2, y, line);
-            y += 8;
+        if(pending_tx_band >= 0) {
+            canvas_set_font(canvas, FontPrimary);
+            canvas_draw_str(canvas, 2, 20, get_band_name(band_order[pending_tx_band]));
+            canvas_set_font(canvas, FontSecondary);
         }
-        return;
+        for(int i = 0; i < 3; i++) {
+            canvas_draw_str(canvas, 2, 33 + i * 10, pending_tx->readout[i]);
+        }
+    } else if(pending_tx_page <= tx_text_pages) {
+        // The Substrate's words, one screenful at a time
+        size_t first = (size_t)(pending_tx_page - 1) * TX_ROWS_PER_PAGE;
+        for(size_t i = 0; i < TX_ROWS_PER_PAGE && first + i < tx_row_count; i++) {
+            canvas_draw_str(canvas, 2, 20 + (int)i * 8, tx_rows[first + i]);
+        }
+    } else {
+        // No period: it is a fact, not a sentence
+        canvas_set_font(canvas, FontPrimary);
+        canvas_draw_str_aligned(canvas, 64, 28, AlignCenter, AlignBottom, "YOU ARE THE");
+        canvas_draw_str_aligned(canvas, 64, 42, AlignCenter, AlignBottom, "FORCE HIDDEN");
+        canvas_set_font(canvas, FontSecondary);
     }
 
-    const char* band_name = get_band_name(band_order[pending_tx_band]);
-    const char** lines = TRANSMISSIONS[pending_tx_band][pending_tx_index];
-
-    // Header
-    canvas_set_font(canvas, FontSecondary);
-    canvas_draw_str(canvas, 2, 8, ">>> TRANSMISSION RECEIVED");
-    canvas_draw_line(canvas, 0, 10, 127, 10);
-
-    // Band label
-    canvas_set_font(canvas, FontPrimary);
-    canvas_draw_str(canvas, 2, 20, band_name);
-
-    // Transmission text — up to 3 lines
-    canvas_set_font(canvas, FontSecondary);
-    int y = 33;
-    for(int i = 0; i < 3; i++) {
-        if(lines[i] == NULL) break;
-        canvas_draw_str(canvas, 2, y, lines[i]);
-        y += 10;
-    }
-
-    // Footer
-    canvas_draw_str(canvas, 2, 63, "OK: Acknowledge");
+    const char* footer = "OK: more";
+    if(pending_tx_page >= tx_last_page()) footer = pending_tx_ack ? "OK: Acknowledge" : "OK: Close";
+    canvas_draw_str(canvas, 2, 63, footer);
 }
 
-static bool transmission_input_callback(InputEvent* event, void* context) {
-    (void)context;
-    if(event->type != InputTypeShort) return false;
-    if(event->key == InputKeyOk || event->key == InputKeyBack) {
-        if(pending_ancient_pull >= 0) {
-            // Flavor only: no acknowledge bonus, nothing to save
-            pending_ancient_pull = -1;
-            view_dispatcher_switch_to_view(view_dispatcher, VIEW_BAND_DETAIL);
-            return true;
-        }
+// Leaves the transmission. An arc transmission pays its acknowledge bonus, and the band's last
+// one pays the band bonus and opens The Substrate.
+static void finish_transmission(void) {
+    if(pending_tx_ack) {
         apply_signal_gain(&player_codex, TRANSMISSION_ACK_BONUS);
         if(pending_band_complete) {
             pending_band_complete = false;
@@ -536,7 +528,21 @@ static bool transmission_input_callback(InputEvent* event, void* context) {
             trigger_substrate_unlock();                              // CQ Morse → Zero Day
         }
         save_codex(&player_codex, NULL);
-        view_dispatcher_switch_to_view(view_dispatcher, VIEW_BAND_DETAIL);
+    }
+    pending_tx = NULL;
+    pending_tx_ack = false;
+    view_dispatcher_switch_to_view(view_dispatcher, VIEW_BAND_DETAIL);
+}
+
+static bool transmission_input_callback(InputEvent* event, void* context) {
+    (void)context;
+    if(event->type != InputTypeShort) return false;
+    if(event->key == InputKeyOk && pending_tx_page < tx_last_page()) {
+        pending_tx_page++;
+        return true;
+    }
+    if(event->key == InputKeyOk || event->key == InputKeyBack) {
+        finish_transmission(); // Back skips ahead: the acknowledge still counts
         return true;
     }
     return false;
