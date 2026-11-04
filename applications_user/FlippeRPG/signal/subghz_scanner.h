@@ -22,6 +22,10 @@ bool subghz_scanner_is_active(void);
 // Returns true if the last scan captured a decodable protocol frame.
 bool subghz_scanner_has_signal(void);
 
+// Returns true if the last scan timed out having heard strong energy that no decoder could
+// name. Only meaningful when subghz_scanner_has_signal() is false.
+bool subghz_scanner_heard_undecoded(void);
+
 // Copy the last decoded signal hash into out_hash.
 // Format: "<PROTO>:<HASH_BYTE>"  e.g. "Princeton:A3"
 // Call only after SUBGHZ_SCAN_DONE_EVENT when subghz_scanner_has_signal() is true.

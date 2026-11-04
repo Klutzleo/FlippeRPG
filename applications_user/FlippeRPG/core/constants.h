@@ -2,19 +2,21 @@
 #ifndef FLIPPERPG_CONSTANTS_H
 #define FLIPPERPG_CONSTANTS_H
 
+#include <stdbool.h>
+
 typedef enum {
     SIGNAL_SUBGHZ,
     SIGNAL_IR,
     SIGNAL_NFC,
     SIGNAL_BLUETOOTH,
-    SIGNAL_RF,
+    SIGNAL_RF, // Retired: merged into SIGNAL_SUBGHZ. Kept so saved indexes and the QR payload stay stable.
     SIGNAL_RFID,
     SIGNAL_UNKNOWN
 } SignalType;
 
 // Internal IDs use original code names — lore canonical names differ.
 // SHRINE_POCKET_CARRIED    = "The Unread"           (RFID)
-// SHRINE_ECHO_TOUCHED      = "The First Frequency"  (RF)
+// SHRINE_ECHO_TOUCHED      = "The First Frequency"  (RF) — RETIRED, see shrine_is_active()
 // SHRINE_FLAME_REACH       = "The Fixed Gaze"       (IR)
 // SHRINE_CAVE_THAT_LISTENS = "The Open Channel"     (Sub-GHz)
 // SHRINE_BIND_WHISPER      = "The Exchange"          (NFC)
@@ -29,6 +31,12 @@ typedef enum {
     SHRINE_UNKNOWN,
     NUM_SHRINES
 } ShrineID;
+
+// The First Frequency went with RF when RF merged into Sub-GHz. Its enum value stays so saved
+// shrine_progress[] indexes don't shift, but it is never shown, attempted, or required.
+static inline bool shrine_is_active(ShrineID id) {
+    return id < SHRINE_UNKNOWN && id != SHRINE_ECHO_TOUCHED;
+}
 
 // Signal strength — the only visible measure of progression.
 // Players see labels only. Math runs underneath. Never expose raw score.
@@ -71,7 +79,6 @@ typedef enum {
     AURA_NONE,
     AURA_CLEARSEEING,
     AURA_TOUCHMARKED,
-    AURA_GROUNDED,
     AURA_STORMTOUCHED,
     AURA_HEARD,
     MAX_AURA_TRAITS
@@ -88,9 +95,35 @@ typedef enum {
 // Band gate progression — Tier 1 (Tutorial → Zero Day):
 // IR → Sub-GHz → NFC → Bluetooth. 5 scans each, sequential, hidden until unlocked.
 // THE SUBSTRATE fires (CQ Morse) after all 4 Tier 1 bands complete.
-// RFID and RF are Tier 2 (post-Zero Day). GPIO and iButton are Tier 3 (post-DEEP).
+// RFID is Tier 2 (post-Zero Day). RF was merged into Sub-GHz — same radio, same band. GPIO and iButton are Tier 3 (post-DEEP).
 #define SCANS_PER_BAND 5
 #define NUM_BANDS 4
+
+// Pacing. A "day" is the RTC date; counters reset at midnight.
+#define SECONDS_PER_DAY 86400u
+// One band may complete per day, so Zero Day is at least NUM_BANDS days out.
+// Set to 0 while testing to let every band open immediately.
+#define BAND_DAY_GATE 1
+// Bluetooth has no source ID to dedupe on, so its scans count per type:
+// at most SCANS_PER_BAND a day, and at least this long apart (move somewhere new).
+#define SOURCELESS_MIN_GAP_SECONDS 600u
+
+// Signal gains. Scans: +3 first counted scan of a type today, +1 second, +0 after.
+#define SCAN_GAIN_FIRST         3
+#define SCAN_GAIN_SECOND        1
+#define TRANSMISSION_ACK_BONUS  8
+#define BAND_COMPLETE_BONUS     30
+// Sized so the fastest path (one band a day, 296 signal) arrives at exactly PRESENT (351):
+// "recognized at the fire" on the day the Substrate opens. Slower players land higher.
+#define ZERO_DAY_ARRIVAL_BONUS  55
+
+// Absence costs 1 signal per fully inactive day, capped so a long break isn't ruinous.
+#define ABSENCE_DECAY_MAX_DAYS  90
+// Stamina is presence, separate from signal strength. It recovers by itself:
+// one point per this many seconds (full in ~8 hours).
+#define STAMINA_MAX 100
+#define STAMINA_RECOVERY_SECONDS_PER_POINT 300u
+
 static const SignalType band_order[NUM_BANDS] = {
     SIGNAL_IR,
     SIGNAL_SUBGHZ,

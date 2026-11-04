@@ -1,5 +1,6 @@
 #pragma once
 #include <stdbool.h>
+#include <stdint.h>
 #include <time.h>
 #include "../core/constants.h"
 
@@ -75,11 +76,11 @@ typedef struct {
     TechniqueProgress techniques[MAX_TECHNIQUES];   // Techniques and mastery
 
     // Band gate state
-    // Bands unlock sequentially: RFID → RF → IR → SubGHz → NFC → Bluetooth
-    // Hidden until unlocked. substrate_unlocked fires exactly once after all 6 bands complete.
-    int  band_scans[6];      // Cumulative scan count per signal type (indexed by SignalType, 0..5)
-    int  bands_unlocked;     // How many bands are currently visible (starts at 1, max 6)
-    bool substrate_unlocked; // True after all 6 bands reach SCANS_PER_BAND
+    // Tier 1 bands unlock sequentially, one per day: IR → SubGHz → NFC → Bluetooth
+    // Hidden until unlocked. substrate_unlocked fires exactly once after all 4 bands complete.
+    int  band_scans[6];      // Counted scans per signal type (indexed by SignalType), capped at SCANS_PER_BAND
+    int  bands_unlocked;     // How many Tier 1 bands are currently visible (starts at 1, max NUM_BANDS)
+    bool substrate_unlocked; // True after all Tier 1 bands reach SCANS_PER_BAND
 
     bool   storm_active;
     time_t storm_start_time;
@@ -88,12 +89,18 @@ typedef struct {
     bool   legacy_mode;     // Whether the Codex has entered legacy state
     char   legacy_title[16]; // Optional: “Signalborn”, “Stormtouched”, etc.
 
-    // Zero Day — set automatically when all six signal bands are complete.
+    // Zero Day — set automatically when all Tier 1 bands are complete.
     // Immutable once set. Gates campfire, aura reveal, and PWA QR unlock.
     // Aura is determined by scan behavior and confirmed via PWA, not assigned here.
     bool   zero_day_confirmed;
     time_t zero_day_date;
     char   faction[16];     // Set via PWA after Zero Day: “Operators”, “Nodes”, “Sovereigns”
+
+    // Save v2 additions. Only ever append fields here: older saves are shorter and load
+    // with the missing tail zeroed (see save_system.c).
+    uint32_t band_complete_day[NUM_BANDS]; // Day number each Tier 1 band completed (0 = unknown)
+    uint32_t last_active_day;              // Day number of the last launch, for absence decay
+    uint32_t stamina_updated;              // RTC timestamp stamina was last brought up to date
 } Codex;
 
 // -------------------- FUNCTION DECLARATIONS --------------------
@@ -102,7 +109,8 @@ typedef struct {
 void codex_init(Codex* codex);
 void init_codex(Codex* codex, const char* player_name);
 
-// Signal logging
+// Signal logging — call only for counted scans (see evaluate_scan in signal_engine.h).
+// Advances the band gate until the band is complete and applies the signal gain.
 void log_signal(Codex* codex, const char* signal_hash, int gain, SignalType signal_type);
 
 // Duel results
@@ -132,5 +140,15 @@ bool ready_for_convergence(Codex* codex);
 void assign_aura(Codex* codex, ShrineID shrine_id);
 
 // Band gate
+// Day number (RTC date) used for the daily counters and the one-band-a-day gate.
+uint32_t codex_today(void);
+// Recomputes how many Tier 1 bands are visible. Cheap — call whenever the list is shown.
+void codex_refresh_bands(Codex* codex);
 // Returns true the moment substrate_unlocked flips to true (fires exactly once per save).
 bool check_band_gate(Codex* codex);
+
+// Time passage — call once after loading a save.
+// Recovers stamina and drains signal for fully inactive days.
+void codex_apply_time_passage(Codex* codex);
+// Drains stamina (never below 0), first crediting any recovery earned so far.
+void codex_drain_stamina(Codex* codex, int amount);

@@ -16,12 +16,16 @@
 // 8-second window — matches IR scanner window
 #define SUBGHZ_SCAN_TIMEOUT_MS 8000
 #define SUBGHZ_POLL_INTERVAL_MS 50
+// Strong energy with no decodable frame = something nobody has named. Kept well above the
+// ~-100 dBm noise floor so only a real, close transmitter counts. Tune against hardware.
+#define SUBGHZ_UNDECODED_RSSI_DBM (-80.0f)
 
 static volatile bool sg_active    = false;
 static volatile bool sg_msg_ready = false;
 static ViewDispatcher* sg_vd      = NULL;
 static char sg_last_hash[32]      = {0};
 static bool sg_had_signal         = false;
+static volatile bool sg_undecoded = false; // Timed out with strong energy but nothing decoded
 static FuriThread* sg_thread      = NULL;
 
 // ---- Receiver callbacks (run in SubGhzWorker thread context) ----
@@ -47,6 +51,10 @@ static void sg_rx_callback(
 
     snprintf(sg_last_hash, sizeof(sg_last_hash), "%.10s:%02X", proto, hash_byte);
     sg_msg_ready = true;
+    // Set before the event goes out: the UI calls subghz_scanner_stop() on that event, which
+    // clears sg_active before the scan thread reaches its own `if(sg_active)` block, so the
+    // thread never gets to record the signal and the scan would read as "nothing heard".
+    sg_had_signal = true;
 
     if(sg_vd) {
         view_dispatcher_send_custom_event(sg_vd, SUBGHZ_SCAN_DONE_EVENT);
@@ -75,6 +83,8 @@ static int32_t sg_scan_thread(void* context) {
     subghz_devices_init();
     const SubGhzDevice* device = subghz_devices_get_by_name(SUBGHZ_DEVICE_CC1101_INT_NAME);
 
+    float max_rssi = -130.0f;
+
     if(device && subghz_devices_begin(device)) {
         subghz_devices_reset(device);
         furi_delay_ms(50); // Let hardware settle after reset
@@ -89,6 +99,8 @@ static int32_t sg_scan_thread(void* context) {
         uint32_t start = furi_get_tick();
         while(sg_active && !sg_msg_ready) {
             furi_delay_ms(SUBGHZ_POLL_INTERVAL_MS);
+            float rssi = subghz_devices_get_rssi(device);
+            if(rssi > max_rssi) max_rssi = rssi;
             if(furi_get_tick() - start > SUBGHZ_SCAN_TIMEOUT_MS) break;
         }
 
@@ -106,6 +118,7 @@ static int32_t sg_scan_thread(void* context) {
 
     if(sg_active) {
         sg_had_signal = sg_msg_ready;
+        sg_undecoded  = !sg_msg_ready && max_rssi > SUBGHZ_UNDECODED_RSSI_DBM;
         if(!sg_msg_ready) {
             // Timeout with no signal — fire event so UI can clean up
             view_dispatcher_send_custom_event(sg_vd, SUBGHZ_SCAN_DONE_EVENT);
@@ -123,6 +136,7 @@ void subghz_scanner_start(ViewDispatcher* dispatcher) {
 
     sg_vd          = dispatcher;
     sg_had_signal  = false;
+    sg_undecoded   = false;
     sg_msg_ready   = false;
     sg_last_hash[0] = '\0';
     sg_active      = true;
@@ -149,6 +163,10 @@ bool subghz_scanner_is_active(void) {
 
 bool subghz_scanner_has_signal(void) {
     return sg_had_signal;
+}
+
+bool subghz_scanner_heard_undecoded(void) {
+    return sg_undecoded;
 }
 
 void subghz_scanner_get_hash(char* out_hash, size_t size) {

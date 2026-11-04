@@ -6,8 +6,7 @@
 
 #define DUEL_OPTIONS       3
 #define DUEL_TIMER_MS      3000
-#define DUEL_STAMINA_LOSS  20   // Stamina drained on loss — signal strength unaffected
-#define STAMINA_MAX        100
+#define DUEL_STAMINA_LOSS  5    // Stamina drained on loss — signal strength unaffected
 #define DUEL_HISTORY_SCAN  20
 
 typedef enum {

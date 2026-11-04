@@ -2,11 +2,21 @@
 #include <storage/storage.h>
 #include <furi.h>
 #include <string.h>
+#include <stddef.h>
 
 #define TAG          "FlippeRPG"
 #define SAVE_PATH    APP_DATA_PATH("codex.bin")
 #define SAVE_MAGIC   0x464C5250  // "FLRP"
-#define SAVE_VERSION 1
+// v2: Codex grew (band_complete_day, last_active_day, stamina_updated).
+// Fields are only ever appended, so an older save is just a shorter prefix of the current struct.
+#define SAVE_VERSION 2
+
+// Size a v1 save has: the struct as it stood before the v2 fields, padded to its alignment.
+static size_t codex_v1_size(void) {
+    size_t end = offsetof(Codex, faction) + sizeof(((Codex*)NULL)->faction);
+    size_t align = _Alignof(Codex);
+    return (end + align - 1) / align * align;
+}
 
 // Header written before the Codex struct to detect corrupt/stale files
 typedef struct {
@@ -80,17 +90,21 @@ bool load_codex(Codex* codex, const char* filename) {
             break;
         }
 
-        if(header.version != SAVE_VERSION) {
-            FURI_LOG_W(TAG, "Load: version mismatch (%lu vs %d)", header.version, SAVE_VERSION);
+        if(header.version < 1 || header.version > SAVE_VERSION) {
+            FURI_LOG_W(TAG, "Load: unsupported version (%lu vs %d)", header.version, SAVE_VERSION);
             break;
         }
 
-        if(header.data_size != sizeof(Codex)) {
+        // A v1 save is a known shorter size: load it and leave the v2 fields zeroed.
+        // Any other size means a different struct layout and can't be read safely.
+        size_t expected = (header.version == 1) ? codex_v1_size() : sizeof(Codex);
+        if(header.data_size != expected) {
             FURI_LOG_W(TAG, "Load: size mismatch (%lu vs %u)", header.data_size, sizeof(Codex));
             break;
         }
 
-        if(storage_file_read(file, codex, sizeof(Codex)) != sizeof(Codex)) {
+        memset(codex, 0, sizeof(Codex));
+        if(storage_file_read(file, codex, header.data_size) != header.data_size) {
             FURI_LOG_E(TAG, "Load: failed to read codex");
             break;
         }

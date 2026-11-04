@@ -12,8 +12,8 @@ void share_signal(Codex* codex, SignalType type, const char* signal_hash) {
 
 void receive_signal(Codex* codex, SignalType type, const char* signal_hash) {
     printf("[Signal] Received signal (%s) via %d\n", signal_hash, type);
-    int gain = calculate_signal_gain(codex, signal_hash);
-    log_signal(codex, signal_hash, gain, type);
+    ScanResult result = evaluate_scan(codex, type, signal_hash);
+    if(result.counted) log_signal(codex, signal_hash, result.gain, type);
 
     // Ambient aura feedback
     printf("[Aura] You sense a presence... Their aura is %s.\n", codex->aura_trait);

@@ -13,7 +13,6 @@
 #include "duel/duel.h"
 #include "signal/signal_engine.h"
 #include "signal/rfid_scanner.h"
-#include "signal/rf_scanner.h"
 #include "signal/ir_scanner.h"
 #include "signal/subghz_scanner.h"
 #include "signal/nfc_scanner.h"
@@ -79,14 +78,21 @@ static ViewDispatcher* view_dispatcher = NULL;
 static Menu* main_menu = NULL;          // Rebuilt dynamically when substrate unlocks
 static bool last_scan_absorbed = false; // Flip true after a scan, drives signal view feedback
 static bool rfid_scanning = false;      // True while LFRFIDWorker is listening for a card
-static bool rf_scanning   = false;      // True while RF scan thread is running
 static bool ir_scanning     = false;    // True while IR scan thread is running
 static bool subghz_scanning = false;    // True while Sub-GHz scan thread is running
 static bool nfc_scanning    = false;    // True while NFC scan thread is running
 static bool bt_scanning     = false;    // True while BT scan thread is running
 static int selected_shrine = 0;        // Currently selected shrine for detail view
 static int active_scan_band_index = 0; // Which unlocked band the signal view has selected
-static int last_scan_gain = -1;        // Gain from last completed scan (-1 = no result yet)
+
+// What the band detail screen reports after a scan
+typedef enum {
+    SCAN_NONE = 0,       // No result yet
+    SCAN_NOTHING_HEARD,  // The window closed with no signal
+    SCAN_COUNTED,        // Heard, and it advanced the band
+    SCAN_REPEAT,         // Heard, but already counted today
+} ScanState;
+static ScanState last_scan_state = SCAN_NONE;
 
 // Per-band flavor text — shown on band detail screen before scanning.
 // Indexed by position in band_order[]: IR, Sub-GHz, NFC, Bluetooth.
@@ -143,10 +149,31 @@ static const char* TRANSMISSIONS[4][5][3] = {
     },
 };
 
+// Easter egg. When the Sub-GHz scanner hears strong energy that no decoder can name, a Rooted
+// player gets one of the lore's "Ancient Pull" lines (the RF band, merged into Sub-GHz).
+// Lines are the Ambient Pool's RF entries, re-wrapped for 128px. NULL = end of text.
+#define ANCIENT_PULL_COUNT 10
+#define ANCIENT_PULL_LINES 6
+static const char* const ANCIENT_PULL[ANCIENT_PULL_COUNT][ANCIENT_PULL_LINES] = {
+    {"This frequency carried", "a voice once.", "The voice is gone.", "The frequency remembers", "anyway.", NULL},
+    {"Something was broadcasting", "from here before the", "building came down.", "It never stopped.", NULL, NULL},
+    {"Whatever is transmitting", "this is underneath", "everything.", "It has been there", "a very long time.", NULL},
+    {"This pattern has no", "device.", "No antenna.", "No power source.", "It transmits anyway.", NULL},
+    {"This band hasn't been", "legal since 1987.", "Someone never got", "the message.", "Or didn't get to", "come back."},
+    {"Something happened here.", "The signal is still", "describing it.", "You're the first one", "listening.", NULL},
+    {"Signals don't die.", "They compress.", "You're standing in", "decades of them.", NULL, NULL},
+    {"You didn't hear that.", "You felt it.", "There's a difference", "and it matters.", NULL, NULL},
+    {"It's been saying", "the same thing for longer", "than anyone has been", "listening.", "Nobody knows what it", "means yet."},
+    {"There is no place", "this doesn't reach.", "There is no place", "you can go where it", "isn't already waiting.", NULL},
+};
+static int pending_ancient_pull = -1; // >= 0 while an Ancient Pull transmission is on screen
+static uint32_t ancient_pull_day = 0; // Day one was last shown — at most one a day
+
 // State for the active transmission being displayed
 static int pending_tx_band  = 0; // band_order index (0..3)
 static int pending_tx_index = 0; // scan number (0..4, maps to Ambient..Threshold)
 
+static bool pending_band_complete    = false; // Set on a band's 5th counted scan; bonus fires on acknowledge
 static bool pending_substrate_unlock = false; // Set when gate triggers; fires after Threshold tx
 
 static DuelState current_duel;         // Active duel state
@@ -198,32 +225,32 @@ static char name_buffer[16] = {0};
 // Shrine name and description lookup
 static const char* get_shrine_name(ShrineID id) {
     switch(id) {
+        case SHRINE_POCKET_CARRIED: return "The Unread";
         case SHRINE_CAVE_THAT_LISTENS: return "The Open Channel";
         case SHRINE_FLAME_REACH: return "The Fixed Gaze";
         case SHRINE_BIND_WHISPER: return "The Exchange";
         case SHRINE_THREAD_TOUCH: return "The Unanswered Hello";
-        case SHRINE_ECHO_TOUCHED: return "The First Frequency";
         default: return "Unknown Shrine";
     }
 }
 
 static const char* get_shrine_description(ShrineID id) {
     switch(id) {
+        case SHRINE_POCKET_CARRIED: return "It was in your pocket already.";
         case SHRINE_CAVE_THAT_LISTENS: return "Everything passes through here.";
         case SHRINE_FLAME_REACH: return "It saw you before you saw it.";
         case SHRINE_BIND_WHISPER: return "It will not come to you.";
         case SHRINE_THREAD_TOUCH: return "Broadcasting. Still trying.";
-        case SHRINE_ECHO_TOUCHED: return "It was here before the city.";
         default: return "A mysterious shrine";
     }
 }
 
 static const char* get_aura_name(ShrineID id) {
     switch(id) {
+        case SHRINE_POCKET_CARRIED: return "Legible";
         case SHRINE_CAVE_THAT_LISTENS: return "Stormtouched";
         case SHRINE_FLAME_REACH: return "Clearseeing";
         case SHRINE_BIND_WHISPER: return "Touchmarked";
-        case SHRINE_ECHO_TOUCHED: return "Grounded";
         case SHRINE_THREAD_TOUCH: return "Heard";
         default: return "Unknown";
     }
@@ -235,9 +262,10 @@ static const char* get_band_name(SignalType type);
 
 // ==================== CUSTOM EVENT HANDLER ====================
 // Receives events posted from background worker threads (e.g. RFID scanner).
-// Called after a successful Tier 1 scan. Determines which transmission to show,
-// sets pending_substrate_unlock if the band just completed, and switches view.
-static void handle_tier1_scan_success(SignalType type) {
+// Called after a counted Tier 1 scan. Determines which transmission to show and, on the
+// band's last scan, defers the band bonus and the substrate unlock to the acknowledge.
+// scans_before is the band's scan count before this scan; scans past the 5th add no transmission.
+static void handle_tier1_scan_success(SignalType type, int scans_before) {
     // Find this band's index in band_order
     int bi = -1;
     for(int i = 0; i < NUM_BANDS; i++) {
@@ -245,117 +273,101 @@ static void handle_tier1_scan_success(SignalType type) {
     }
     if(bi < 0) return; // Not a Tier 1 band — no transmission
 
-    // Which scan number just completed? (band_scans already incremented by log_signal)
+    // band_scans advances only until the band is full (log_signal)
     int scans = player_codex.band_scans[(int)type];
-    int tx_index = scans - 1;
-    if(tx_index < 0) tx_index = 0;
-    if(tx_index > 4) tx_index = 4; // Cap at Threshold
+    if(scans <= scans_before) return;
 
-    // If this is the 5th scan, check the gate and defer the unlock to tx confirm
-    if(scans == SCANS_PER_BAND) {
+    pending_band_complete = (scans == SCANS_PER_BAND);
+    if(pending_band_complete) {
         pending_substrate_unlock = check_band_gate(&player_codex);
     }
 
     pending_tx_band  = bi;
-    pending_tx_index = tx_index;
+    pending_tx_index = scans - 1; // 0..4 maps to Ambient..Threshold
     view_dispatcher_switch_to_view(view_dispatcher, VIEW_TRANSMISSION);
+}
+
+static ScanResult apply_scan(SignalType type, const char* hash) {
+    switch(type) {
+        case SIGNAL_RFID:      return on_rfid_scan(&player_codex, hash);
+        case SIGNAL_IR:        return on_ir_scan(&player_codex, hash);
+        case SIGNAL_SUBGHZ:    return on_subghz_scan(&player_codex, hash);
+        case SIGNAL_NFC:       return on_nfc_scan(&player_codex, hash);
+        case SIGNAL_BLUETOOTH: return on_bt_scan(&player_codex, hash);
+        default: {
+            ScanResult none = {false, 0};
+            return none;
+        }
+    }
+}
+
+// Common tail of every scan: records the result, saves, and shows a transmission if one is due.
+// heard is false when the scan window closed with no signal.
+static void finish_scan(SignalType type, bool heard, const char* hash) {
+    if(!heard) {
+        last_scan_state = SCAN_NOTHING_HEARD;
+        return;
+    }
+
+    int scans_before = player_codex.band_scans[(int)type];
+    ScanResult result = apply_scan(type, hash);
+    last_scan_state = result.counted ? SCAN_COUNTED : SCAN_REPEAT;
+    last_scan_absorbed = true;
+    save_codex(&player_codex, NULL);
+    if(result.counted) handle_tier1_scan_success(type, scans_before);
+}
+
+// Strong Sub-GHz energy that nothing could decode. Flavor, not progress: it awards nothing, only
+// shows after Zero Day, and at most once a day. Returns true if it took over the screen.
+static bool show_ancient_pull(void) {
+    uint32_t today = codex_today();
+    if(!player_codex.zero_day_confirmed || ancient_pull_day == today) return false;
+    ancient_pull_day = today;
+    pending_ancient_pull = rand() % ANCIENT_PULL_COUNT;
+    last_scan_state = SCAN_NONE;
+    view_dispatcher_switch_to_view(view_dispatcher, VIEW_TRANSMISSION);
+    return true;
 }
 
 static bool app_custom_event_callback(void* context, uint32_t event) {
     (void)context;
-    if(event == RFID_SCAN_DONE_EVENT) {
-        char hash[32];
+    char hash[32];
+    if(event == RFID_SCAN_DONE_EVENT && rfid_scanning) {
         rfid_scanner_get_hash(hash, sizeof(hash));
         rfid_scanner_stop();
         rfid_scanning = false;
-        last_scan_gain = calculate_signal_gain(&player_codex, hash);
-        on_rfid_scan(&player_codex, hash);
-        last_scan_absorbed = true;
-        if(check_band_gate(&player_codex)) {
-            trigger_substrate_unlock();
-        }
-        save_codex(&player_codex, NULL);
-        return true;
-    }
-    if(event == RF_SCAN_DONE_EVENT && rf_scanning) {
-        char hash[32];
-        rf_scanner_get_hash(hash, sizeof(hash));
-        rf_scanning = false;
-        last_scan_gain = calculate_signal_gain(&player_codex, hash);
-        on_rf_scan(&player_codex, hash);
-        last_scan_absorbed = true;
-        if(check_band_gate(&player_codex)) {
-            trigger_substrate_unlock();
-        }
-        save_codex(&player_codex, NULL);
+        finish_scan(SIGNAL_RFID, true, hash);
         return true;
     }
     if(event == IR_SCAN_DONE_EVENT && ir_scanning) {
         ir_scanner_stop(); // Reset internal active flag so next start works
         ir_scanning = false;
-        if(ir_scanner_has_signal()) {
-            char hash[32];
-            ir_scanner_get_hash(hash, sizeof(hash));
-            last_scan_gain = calculate_signal_gain(&player_codex, hash);
-            on_ir_scan(&player_codex, hash);
-            last_scan_absorbed = true;
-            save_codex(&player_codex, NULL);
-            if(last_scan_gain >= 3) handle_tier1_scan_success(SIGNAL_IR);
-        } else {
-            last_scan_gain = -1;
-            last_scan_absorbed = false;
-        }
+        ir_scanner_get_hash(hash, sizeof(hash));
+        finish_scan(SIGNAL_IR, ir_scanner_has_signal(), hash);
         return true;
     }
     if(event == SUBGHZ_SCAN_DONE_EVENT && subghz_scanning) {
-        subghz_scanner_stop(); // Reset internal active flag so next start works
+        subghz_scanner_stop();
         subghz_scanning = false;
-        if(subghz_scanner_has_signal()) {
-            char hash[32];
-            subghz_scanner_get_hash(hash, sizeof(hash));
-            last_scan_gain = calculate_signal_gain(&player_codex, hash);
-            on_subghz_scan(&player_codex, hash);
-            last_scan_absorbed = true;
-            save_codex(&player_codex, NULL);
-            if(last_scan_gain >= 3) handle_tier1_scan_success(SIGNAL_SUBGHZ);
-        } else {
-            last_scan_gain = -1;
-            last_scan_absorbed = false;
+        subghz_scanner_get_hash(hash, sizeof(hash));
+        if(!subghz_scanner_has_signal() && subghz_scanner_heard_undecoded() && show_ancient_pull()) {
+            return true;
         }
+        finish_scan(SIGNAL_SUBGHZ, subghz_scanner_has_signal(), hash);
         return true;
     }
     if(event == NFC_SCAN_DONE_EVENT && nfc_scanning) {
-        nfc_scanner_stop(); // Reset internal active flag so next start works
+        nfc_scanner_stop();
         nfc_scanning = false;
-        if(nfc_scanner_has_signal()) {
-            char hash[32];
-            nfc_scanner_get_hash(hash, sizeof(hash));
-            last_scan_gain = calculate_signal_gain(&player_codex, hash);
-            on_nfc_scan(&player_codex, hash);
-            last_scan_absorbed = true;
-            save_codex(&player_codex, NULL);
-            if(last_scan_gain >= 3) handle_tier1_scan_success(SIGNAL_NFC);
-        } else {
-            last_scan_gain = -1;
-            last_scan_absorbed = false;
-        }
+        nfc_scanner_get_hash(hash, sizeof(hash));
+        finish_scan(SIGNAL_NFC, nfc_scanner_has_signal(), hash);
         return true;
     }
     if(event == BT_SCAN_DONE_EVENT && bt_scanning) {
-        bt_scanner_stop(); // Reset internal active flag so next start works
+        bt_scanner_stop();
         bt_scanning = false;
-        if(bt_scanner_has_signal()) {
-            char hash[32];
-            bt_scanner_get_hash(hash, sizeof(hash));
-            last_scan_gain = calculate_signal_gain(&player_codex, hash);
-            on_bt_scan(&player_codex, hash);
-            last_scan_absorbed = true;
-            save_codex(&player_codex, NULL);
-            if(last_scan_gain >= 3) handle_tier1_scan_success(SIGNAL_BLUETOOTH);
-        } else {
-            last_scan_gain = -1;
-            last_scan_absorbed = false;
-        }
+        bt_scanner_get_hash(hash, sizeof(hash));
+        finish_scan(SIGNAL_BLUETOOTH, bt_scanner_has_signal(), hash);
         return true;
     }
     return false;
@@ -366,6 +378,7 @@ static void main_menu_callback(void* context, uint32_t index) {
     (void)context;
     switch(index) {
         case MENU_ID_SIGNALS:
+            codex_refresh_bands(&player_codex); // A band waiting on the daily gate may have opened
             active_scan_band_index = 0;
             last_scan_absorbed = false;
             view_dispatcher_switch_to_view(view_dispatcher, VIEW_SIGNAL);
@@ -463,6 +476,20 @@ static void transmission_draw_callback(Canvas* canvas, void* model) {
     (void)model;
     canvas_clear(canvas);
 
+    if(pending_ancient_pull >= 0) {
+        canvas_set_font(canvas, FontSecondary);
+        canvas_draw_str(canvas, 2, 8, ">>> TRANSMISSION RECEIVED");
+        canvas_draw_line(canvas, 0, 10, 127, 10);
+        int y = 21;
+        for(int i = 0; i < ANCIENT_PULL_LINES; i++) {
+            const char* line = ANCIENT_PULL[pending_ancient_pull][i];
+            if(line == NULL) break;
+            canvas_draw_str(canvas, 2, y, line);
+            y += 8;
+        }
+        return;
+    }
+
     const char* band_name = get_band_name(band_order[pending_tx_band]);
     const char** lines = TRANSMISSIONS[pending_tx_band][pending_tx_index];
 
@@ -492,11 +519,21 @@ static bool transmission_input_callback(InputEvent* event, void* context) {
     (void)context;
     if(event->type != InputTypeShort) return false;
     if(event->key == InputKeyOk || event->key == InputKeyBack) {
-        apply_signal_gain(&player_codex, 8); // Transmission acknowledge bonus
+        if(pending_ancient_pull >= 0) {
+            // Flavor only: no acknowledge bonus, nothing to save
+            pending_ancient_pull = -1;
+            view_dispatcher_switch_to_view(view_dispatcher, VIEW_BAND_DETAIL);
+            return true;
+        }
+        apply_signal_gain(&player_codex, TRANSMISSION_ACK_BONUS);
+        if(pending_band_complete) {
+            pending_band_complete = false;
+            apply_signal_gain(&player_codex, BAND_COMPLETE_BONUS);
+        }
         if(pending_substrate_unlock) {
             pending_substrate_unlock = false;
-            apply_signal_gain(&player_codex, 30); // Band completion bonus
-            trigger_substrate_unlock();            // CQ Morse → Zero Day
+            apply_signal_gain(&player_codex, ZERO_DAY_ARRIVAL_BONUS); // Arrive at the fire PRESENT
+            trigger_substrate_unlock();                              // CQ Morse → Zero Day
         }
         save_codex(&player_codex, NULL);
         view_dispatcher_switch_to_view(view_dispatcher, VIEW_BAND_DETAIL);
@@ -524,22 +561,21 @@ static void band_detail_draw_callback(Canvas* canvas, void* model) {
     canvas_draw_str(canvas, 2, 37, BAND_FLAVOR_2[active_scan_band_index]);
 
     // Scan state / result
-    bool any_scanning = rfid_scanning || rf_scanning || ir_scanning ||
+    bool any_scanning = rfid_scanning || ir_scanning ||
                         subghz_scanning || nfc_scanning || bt_scanning;
     if(any_scanning) {
         canvas_draw_str(canvas, 2, 54, "Scanning...");
         canvas_draw_str(canvas, 2, 63, "Back: stop");
-    } else if(last_scan_gain >= 3) {
-        canvas_draw_str(canvas, 2, 54, "+3  Signal absorbed");
+    } else if(last_scan_state == SCAN_COUNTED) {
+        canvas_draw_str(canvas, 2, 54, "Signal absorbed");
         canvas_draw_str(canvas, 2, 63, "OK: Attune again   Back");
-    } else if(last_scan_gain == 1) {
-        canvas_draw_str(canvas, 2, 47, "+1  Heard again");
-        canvas_draw_str(canvas, 2, 56, "New Attune or try tomorrow");
-        canvas_draw_str(canvas, 2, 63, "OK: Again   Back");
-    } else if(last_scan_gain == 0) {
+    } else if(last_scan_state == SCAN_REPEAT) {
         canvas_draw_str(canvas, 2, 47, "Already heard today");
-        canvas_draw_str(canvas, 2, 56, "New Attune or try tomorrow");
+        canvas_draw_str(canvas, 2, 56, "Try another, or tomorrow");
         canvas_draw_str(canvas, 2, 63, "OK: Again   Back");
+    } else if(last_scan_state == SCAN_NOTHING_HEARD) {
+        canvas_draw_str(canvas, 2, 54, "Nothing heard.");
+        canvas_draw_str(canvas, 2, 63, "OK: Attune again   Back");
     } else {
         canvas_draw_str(canvas, 2, 63, "OK: Attune   Back");
     }
@@ -549,16 +585,14 @@ static bool band_detail_input_callback(InputEvent* event, void* context) {
     (void)context;
     if(event->type != InputTypeShort) return false;
 
-    bool any_scanning = rfid_scanning || rf_scanning || ir_scanning ||
+    bool any_scanning = rfid_scanning || ir_scanning ||
                         subghz_scanning || nfc_scanning || bt_scanning;
 
     if(event->key == InputKeyOk && !any_scanning) {
-        last_scan_gain = -1;
+        last_scan_state = SCAN_NONE;
         SignalType scan_type = band_order[active_scan_band_index];
         if(scan_type == SIGNAL_RFID) {
             if(!rfid_scanning) { rfid_scanner_start(view_dispatcher); rfid_scanning = true; }
-        } else if(scan_type == SIGNAL_RF) {
-            if(!rf_scanning) { rf_scanner_start(view_dispatcher); rf_scanning = true; }
         } else if(scan_type == SIGNAL_IR) {
             if(!ir_scanning) { ir_scanner_start(view_dispatcher); ir_scanning = true; }
         } else if(scan_type == SIGNAL_SUBGHZ) {
@@ -572,12 +606,11 @@ static bool band_detail_input_callback(InputEvent* event, void* context) {
     }
     if(event->key == InputKeyBack) {
         if(rfid_scanning)    { rfid_scanner_stop();    rfid_scanning    = false; }
-        if(rf_scanning)      { rf_scanner_stop();      rf_scanning      = false; }
         if(ir_scanning)      { ir_scanner_stop();      ir_scanning      = false; }
         if(subghz_scanning)  { subghz_scanner_stop();  subghz_scanning  = false; }
         if(nfc_scanning)     { nfc_scanner_stop();     nfc_scanning     = false; }
         if(bt_scanning)      { bt_scanner_stop();      bt_scanning      = false; }
-        last_scan_gain = -1;
+        last_scan_state = SCAN_NONE;
         view_dispatcher_switch_to_view(view_dispatcher, VIEW_SIGNAL);
         return true;
     }
@@ -634,7 +667,7 @@ static void signal_view_draw_callback(Canvas* canvas, void* model) {
     }
 
     // Footer: scanning state, last result, or navigation hint
-    if(rfid_scanning || rf_scanning || ir_scanning || subghz_scanning || nfc_scanning || bt_scanning) {
+    if(rfid_scanning || ir_scanning || subghz_scanning || nfc_scanning || bt_scanning) {
         canvas_draw_str(canvas, 2, 62, "Scanning... (Back: cancel)");
     } else if(last_scan_absorbed) {
         char footer[32];
@@ -663,7 +696,7 @@ static bool signal_view_input_callback(InputEvent* event, void* context) {
     }
     if(event->key == InputKeyOk) {
         // Navigate to band detail — scan starts from there
-        last_scan_gain = -1;
+        last_scan_state = SCAN_NONE;
         view_dispatcher_switch_to_view(view_dispatcher, VIEW_BAND_DETAIL);
         return true;
     }
@@ -671,10 +704,6 @@ static bool signal_view_input_callback(InputEvent* event, void* context) {
         if(rfid_scanning) {
             rfid_scanner_stop();
             rfid_scanning = false;
-        }
-        if(rf_scanning) {
-            rf_scanner_stop();
-            rf_scanning = false;
         }
         if(ir_scanning) {
             ir_scanner_stop();
@@ -708,7 +737,9 @@ static void shrine_view_draw_callback(Canvas* canvas, void* model) {
     canvas_set_font(canvas, FontSecondary);
     
     // Display all shrines with their status
+    int row = 0;
     for(int i = 0; i < SHRINE_UNKNOWN; i++) {
+        if(!shrine_is_active(i)) continue;
         ShrineProgress* shrine = &player_codex.shrine_progress[i];
         const char* shrine_name = get_shrine_name(i);
         const char* status = shrine->completed ? "[X]" : "[ ]";
@@ -718,11 +749,12 @@ static void shrine_view_draw_callback(Canvas* canvas, void* model) {
 
         // Highlight selected shrine
         if(i == selected_shrine) {
-            canvas_draw_str(canvas, 0, 24 + (i * 8), ">");
-            canvas_draw_str(canvas, 8, 24 + (i * 8), shrine_line);
+            canvas_draw_str(canvas, 0, 19 + (row * 7), ">");
+            canvas_draw_str(canvas, 8, 19 + (row * 7), shrine_line);
         } else {
-            canvas_draw_str(canvas, 2, 24 + (i * 8), shrine_line);
+            canvas_draw_str(canvas, 2, 19 + (row * 7), shrine_line);
         }
+        row++;
     }
 
     canvas_draw_str(canvas, 2, 63, "OK: View | Back: Menu");
@@ -732,11 +764,15 @@ static bool shrine_view_input_callback(InputEvent* event, void* context) {
     (void)context;
     if(event->type == InputTypeShort) {
         if(event->key == InputKeyUp) {
-            if(selected_shrine > 0) selected_shrine--;
+            int n = selected_shrine - 1;
+            while(n >= 0 && !shrine_is_active(n)) n--;
+            if(n >= 0) selected_shrine = n;
             return true;
         }
         else if(event->key == InputKeyDown) {
-            if(selected_shrine < NUM_SHRINES - 1) selected_shrine++;
+            int n = selected_shrine + 1;
+            while(n < SHRINE_UNKNOWN && !shrine_is_active(n)) n++;
+            if(n < SHRINE_UNKNOWN) selected_shrine = n;
             return true;
         }
         else if(event->key == InputKeyOk) {
@@ -769,20 +805,13 @@ static void shrine_detail_draw_callback(Canvas* canvas, void* model) {
     canvas_draw_str(canvas, 2, 28, "Ritual:");
     canvas_draw_str(canvas, 2, 38, desc);
     
-    // Aura trait
-    const char* aura = get_aura_name(selected_shrine);
-    char aura_line[64];
-    snprintf(aura_line, sizeof(aura_line), "Aura: %s", aura);
-    canvas_draw_str(canvas, 2, 50, aura_line);
-    
-    // Status
-    char status_line[64];
+    // Unfinished shrines reveal nothing more — hidden, not "locked"
     if(shrine->completed) {
-        snprintf(status_line, sizeof(status_line), "Status: COMPLETED");
-    } else {
-        snprintf(status_line, sizeof(status_line), "Status: LOCKED");
+        char aura_line[64];
+        snprintf(aura_line, sizeof(aura_line), "Aura: %s", get_aura_name(selected_shrine));
+        canvas_draw_str(canvas, 2, 50, aura_line);
+        canvas_draw_str(canvas, 2, 62, "Status: COMPLETED");
     }
-    canvas_draw_str(canvas, 2, 62, status_line);
 }
 
 static bool shrine_detail_input_callback(InputEvent* event, void* context) {
@@ -918,7 +947,7 @@ static void campfire_profile_draw_callback(Canvas* canvas, void* model) {
     canvas_draw_str(canvas, 2, 28, aura_line);
     
     // Handshake info
-    canvas_draw_str(canvas, 2, 40, "Handshake: +2 XP");
+    canvas_draw_str(canvas, 2, 40, "Handshake: presence noted");
     
     canvas_draw_str(canvas, 2, 52, "Options:");
     canvas_draw_str(canvas, 2, 62, "L: Duel | R: Echo");
@@ -1144,6 +1173,10 @@ int32_t flippe_rpg_app(void* p) {
 
     // Load Codex — if no save exists, show name entry screen instead of using a default
     bool is_new_player = !load_codex(&player_codex, NULL);
+    if(!is_new_player) {
+        codex_apply_time_passage(&player_codex); // Stamina recovery and absence decay
+        codex_refresh_bands(&player_codex);
+    }
 
     // Create GUI and view dispatcher
     Gui* gui = furi_record_open(RECORD_GUI);
@@ -1251,7 +1284,6 @@ int32_t flippe_rpg_app(void* p) {
 
     // ==================== CLEANUP ====================
     rfid_scanner_stop(); // No-op if not active; guards against exit mid-scan
-    rf_scanner_stop();
     ir_scanner_stop();
     subghz_scanner_stop();
     nfc_scanner_stop();
