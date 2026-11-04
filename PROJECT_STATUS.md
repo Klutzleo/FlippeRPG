@@ -2,9 +2,9 @@
 phase: active
 priority: high
 category: embedded-game
-progress: 68
-focus: Shrine signal conditions + PWA companion
-next_milestone: Real shrine triggers wired to hardware scan results
+progress: 68                     # unchanged since June; Jason to confirm after the open PRs are tested
+focus: "Three stacked draft PRs (#1-#3) hold the Oct 27 work; waiting for an on-device test"
+next_milestone: "PRs #1-#3 tested on a Flipper and merged, then real shrine triggers"
 milestone_distance: weeks
 excitement: high
 strategic: true
@@ -13,7 +13,20 @@ audience: flipper-zero-community
 uniqueness: first-mover ARG/RPG for Flipper
 viral_potential: high
 mvp_distance: weeks
+waiting_on: jason                # jason / claude / external / none
+decision: "Test PRs #1-#3 on a Flipper (each PR has a test plan) and merge in order #1, #2, #3. Anything fail?"
+if_go: "After the merges, Claude starts real shrine triggers (IR first) on a branch, host-tested; or the IR-hash fix if a device test shows different remote buttons counting as one source. Claude cannot run a Flipper, so anything hardware-facing comes back for Jason to try."
+status_verified: "2026-11-04 against git history of dev and the three open PRs; nothing run on a device"
 ---
+
+## Current state (2026-11-04)
+`dev` has not changed since 2026-06-26. The Oct 27 work is on three **open, stacked draft PRs**, built but **not yet run on a Flipper**:
+
+- **#1 `scoring-and-rf-merge` → dev:** scoring reworked to the lore's per-type daily rules (a source counts once a day, gain +3/+1/+0 per band per day, one band opens per day); RF merged into Sub-GHz; The Unread (RFID) shrine and Legible aura wired; The First Frequency shrine and Grounded aura retired; save format v2 (old saves load); stamina recovery and absence decay; shrine list fixes; "XP" wording removed.
+- **#2 `host-tests` → #1:** PC-side tests of the game rules (`tests/host/run.sh`, no Flipper needed). Three old tests that no longer built were removed.
+- **#3 `transmissions` → #2:** the lore's real transmissions (82) replace the 20 placeholders, word-wrapped at runtime. The `.fap` grows from 57 KB to 77 KB, so first check that it still loads.
+
+The sections "What's working" and "What's missing" below describe `dev` as of June. Where they disagree with the PRs, the PRs are newer. Still true on the PR branches: shrines use a random 70% roll (`FlippeRPG.c`, search for `rand() % 100) < 70`), and the PWA does not exist. The `Klutzleo/flipperpg-pwa` repo is only a LICENSE file from 2026-03-30.
 
 ## What this is
 FlippeRPG is an ARG-flavored RPG for the Flipper Zero. Players scan real-world RF signals
@@ -30,6 +43,7 @@ Output: `build\f7-firmware-D\.extapps\flipperpg.fap` → `/ext/apps/User/flipper
 ---
 
 ## What's working
+*As of `dev` on 2026-06-26. See Current state above for what the open PRs change (scoring, RF, transmissions).*
 
 **Core signal loop**
 All 6 hardware scanners implemented and integrated: IR, Sub-GHz, NFC, Bluetooth, RF, RFID.
@@ -90,6 +104,7 @@ Auto-set when substrate unlocks. Gates campfire, aura reveal in status screen, f
 ---
 
 ## What's missing / not started
+*As of `dev` on 2026-06-26. PR #1 covers: SHRINE_POCKET_CARRIED / The Unread, absence decay, stamina recovery, the "XP" wording, and parts of the shrine list/detail fixes.*
 
 **Shrine signal condition triggers**
 The real shrine trigger logic (e.g., multiple distinct RFID UIDs = The Unread; high device
@@ -152,33 +167,28 @@ signal_share.h/.c stub exists. No actual BT-based player-to-player signal transf
 ---
 
 ## Next up
-- [ ] Wire real signal conditions to shrine triggers (start with The Fixed Gaze / IR — simplest)
-- [ ] Hide shrines not yet encountered from Shrine List
-- [ ] Hide shrine detail content before zero_day_confirmed
-- [ ] Fix "XP" language bug in Campfire Profile
-- [ ] Fix SHRINE_POCKET_CARRIED missing from shrine_requirements[]
-- [ ] Implement absence decay (daily -1 signal on inactive day)
-- [ ] Stamina recovery over time
+- [ ] Run the on-device test plan in PR #1, then #2 and #3; merge in order (#3 retargets automatically)
+- [ ] Wire real signal conditions to shrine triggers (start with IR; the 70% roll is still the placeholder)
+- [ ] IR hash may not use the protocol, so different buttons on one remote could count as one source (follow-up named in PR #1; needs a device test)
+- [ ] Shrine detail: hide content before zero_day_confirmed
 - [ ] Echo UI (browse, fuse)
-- [ ] PWA spec and scaffold (faction, aura confirm, shrine map)
+- [ ] PWA spec and scaffold (faction, aura confirm, shrine map); `Klutzleo/flipperpg-pwa` exists but is empty
+- [ ] Re-add the "[SCAN QR TO GO DEEPER]" line to transmissions once PWA landing pages exist (left out on purpose in PR #3)
 
----
+## Blockers
+- Nothing has been run on a Flipper since the Oct 27 changes. Until it is, the three PRs cannot be merged safely.
+- The PWA is a hard blocker for the full endgame loop (faction selection gates the Campfire).
+- The lore PDFs are not in the repo, so `tools/gen_transmissions.py` (PR #3) needs them on the machine that regenerates the transmissions.
 
 ## Resume here
-All 6 scanners work. Band gate fires CQ correctly. Transmissions display correctly. QR
-on The Substrate encodes and renders. The first incomplete loop is the shrine system —
-shrines need real signal condition triggers instead of the random 70% placeholder.
-
-Start in `shrine/shrine.c` → `trigger_shrine()`. The signal type is already passed in.
-Add threshold checks per band: e.g., IR shrine needs a stationary IR source held for N
-scans; Sub-GHz shrine needs multiple overlapping sources. The scan state from the scanner
-thread is available at the time trigger_shrine() is called.
-
-After shrines: faction/PWA is the critical path for the full endgame loop.
+Open PR #1 (https://github.com/Klutzleo/FlippeRPG/pull/1) and work through its "Test plan on device" checklist with the Flipper plugged in; PRs #2 and #3 have their own lists (#3's first item: the app still loads at 77 KB).
+When those are merged, the first code task is the shrine ritual: the placeholder roll is in `FlippeRPG.c`, and `shrine/shrine.c: trigger_shrine()` currently only checks that the signal type matches the shrine.
 
 ---
 
 ## Last session
+2026-11-04: Status rewritten by Claude from git history and the three open PRs (the file had not been updated since the Oct 27 work). Nothing was run on a device. Before that: 2026-10-27, three stacked draft PRs opened (#1 scoring and RF merge, #2 host tests, #3 real transmissions).
+
 2026-06-26: Project status doc rewritten from scratch. All 6 scanners confirmed integrated.
 Band gate, CQ Morse, Transmission system, QR substrate view all working. Shrine logic wired
 but using random success — real signal condition triggers are the immediate next milestone.
